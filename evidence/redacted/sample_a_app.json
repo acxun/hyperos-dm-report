@@ -1,0 +1,14 @@
+{
+  "appLabel": "<APP_LABEL>",
+  "pkgName": "<PACKAGE>",
+  "Time": "2026-11-05 00:00:00",
+  "runTime": "<MIN>",
+  "launchCount": "<COUNT>",
+  "tx1": "<KB>",
+  "rx1": "<KB>",
+  "tx2": "<KB>",
+  "rx2": "<KB>",
+  "totalData1": "<KB>",
+  "totalData2": "<KB>",
+  "totalDataWiFi": "<MB>"
+}

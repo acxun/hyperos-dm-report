@@ -1,0 +1,125 @@
+# 已知缺口与后续工作
+
+本文件记录当前调查**尚未覆盖**的部分，按优先级排列，便于后续补充。
+
+---
+
+## P0：影响核心结论的缺口
+
+### 1. A 包（App 清单）缺少“可解密的抓包样本”
+
+- 现状：抓到 40,464 字节的 A 包密文，服务器返回 `200 OK`；因成功上报不落库，本地没有对应明文，无法还原。
+- 影响：A 包的网络密文 → 明文闭环未完成。
+- 补法：
+  - 持续抓包，等待一次 `429` 让 App 落库；
+  - 或在受控环境复现 `key = MD5(明文)` 的加密流程；
+  - 或取得服务器 RSA 私钥（不现实）。
+
+### 2. 移动 DM 的 HTTPS 内容未解密
+
+- 现状：只拿到 TLS 元数据（连接时间、字节数、SNI）与本地 DB。
+- 影响：无法确认心跳/App 上报的字段级内容与线上格式。
+- 补法：在受控测试环境做 MITM（安装用户 CA + 关闭 pinning），或分析客户端 SDK 的序列化逻辑并重建。
+
+### 3. 关闭总闸后是否真的停止
+
+- 现状：仅从代码推断 `operator_service_improve_plan=0` 会让上报直接 `return false`。
+- 影响：缺少“关闭后 24h 无连接”的实证。
+- 补法：置 0 后连续抓包 24–48h，统计两个 DM 域名的连接数。
+
+### 4. 禁用组件的系统影响未评估
+
+- 现状：未实际 `pm disable-user`。
+- 影响：无法给出“安全且不影响功能”的处置建议。
+- 补法：在备份/可回滚前提下禁用，观察 VoLTE、5G、OTA、运营商服务、紧急呼叫等。
+
+---
+
+## P1：证据完整性缺口
+
+### 5. 未做长期流量统计
+
+- 现状：仅在数分钟窗口内抓包。
+- 补法：`dumpsys netstats` 按 uid 统计 7 天；或旁路镜像 24h。
+
+### 6. MiSight 实际上传内容未捕获
+
+- 现状：`events` 表为空，仅看到配置拉取与上传时间戳。
+- 补法：在触发遥测事件（崩溃、性能、充电）时抓包；或 hook OneTrack SDK。
+
+### 7. `com.miui.securitycenter` 其它数据文件未分析
+
+- 现状：只分析了 `fraud_detection_data.db`。
+- 待看：`/data/misc/user/0/securitycenter/cta`、`fire_wall_config*.db`、`/data/user/0/com.miui.securitycenter/shared_prefs/*`。
+
+### 8. APK 与证书的哈希清单不完整
+
+- 现状：已计算 4 个 APK 与 `pub.cer` 的 SHA-256（见 `iocs.md`）。
+- 补法：补充各 split APK、oat/vdex、证书链、签名方案（v2/v3）详情。
+
+### 9. 未验证导出组件的实际可利用性
+
+- 现状：从 manifest 与代码判断 `RegisterHelperService` 无权限保护。
+- 补法：写一个最小 PoC App，实际绑定并调用 `c(String)`，验证能否重定向上报地址（仅在本人设备上）。
+
+### 10. 未做 TLS 证书与 pinning 检查
+
+- 现状：移动 DM 走 HTTPS，未验证证书链、是否 pinning、是否校验证书。
+- 补法：MITM 或 `openssl s_client` 对比。
+
+---
+
+## P2：覆盖范围缺口
+
+### 11. 仅覆盖单机型 / 单系统版本
+
+- 现状：一台 Redmi Note 14 Pro，HyperOS 3.0.306。
+- 补法：在其它机型、其它 HyperOS/MIUI 版本上重复取证，比较组件差异。
+
+### 12. 未覆盖中国电信及其它运营商 DM
+
+- 现状：只发现联通（SystemHelper）与移动（DMRegService）。
+- 补法：检查 `com.ct.*`、`com.miui.dmregservice` 的电信分支、`/product/priv-app` 下其它 RegService。
+
+### 13. 未分析系统级日志与诊断通道
+
+- 现状：未看 `com.bsp.logmanager`、`com.debug.loggerui`、`com.miui.misightservice` 的日志落盘。
+- 补法：检查 `/data/vendor/log`、`/data/misc/logd`、`dropbox`。
+
+---
+
+## P3：报告与工程化缺口
+
+### 14. 缺少一页 Executive Summary
+
+面向非技术读者的 1 页摘要（现状、风险、建议）。
+
+### 15. 缺少图
+
+- 数据流图（采集 → 本地队列 → 加密 → 上报 → 重试）
+- 时间线图（安装、首次上报、抓包、解密）
+- 攻击面图（导出组件、权限、网络）
+
+### 16. 缺少证据哈希清单与签收
+
+每个证据文件（pcap / DB / 导出 JSON）应附 SHA-256，便于复核。
+
+### 17. 缺少法律与合规章节
+
+- 《个人信息保护法》告知同意、最小必要；
+- 运营商 DM 的合规依据；
+- 公开披露的边界与脱敏规范。
+
+### 18. 缺少术语表
+
+DM、LwM2M、CoAP、IMSI/ICCID、TAC/CID、PCI、RSRP/SINR 等。
+
+### 19. 工具未做参数化与测试
+
+- `tools/pcap_tcp.py`：目前按 SLL2 解析，需支持 Ethernet/SLL、IPv6 扩展头、乱序/重传。
+- `tools/decrypt_match.py`：需支持大包、并发流、按时间窗口匹配。
+
+### 20. 缺少 CI / 发布流程
+
+- Markdown lint、链接检查、PDF 生成；
+- 版本号与 CHANGELOG 规范。

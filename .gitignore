@@ -1,0 +1,11 @@
+# 内部版报告、原始导出、抓包与数据库均不入库
+private/
+*.pcap
+*.pcapng
+*.db
+*.sqlite
+*.apk
+*.csv
+__pycache__/
+*.pyc
+.DS_Store
