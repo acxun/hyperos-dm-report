@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.4 — 2026-11-05
+
+### Fixed
+- 公开报告证据结构中的 `pcap/` 改为 `redacted/`，并注明原始 pcap 仅本地保留。
+- 重新生成 `dist/report_public.pdf`。
+
 ## v1.2.3 — 2026-11-05
 
 ### Changed

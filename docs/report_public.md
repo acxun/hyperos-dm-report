@@ -408,8 +408,10 @@ evidence/
 │   └── full/                   # 完整 jadx 源码树（本地保留）
 ├── certificates/               # pub.cer / pub.pem / openssl 文本
 ├── databases/                  # 仅 schema 与行数
-└── pcap/                       # B / R / A 三次关键抓包
+└── redacted/                   # 脱敏样本
 ```
+
+> 原始 pcap 仅本地保留（`private/pcap/`），不入库。
 
 校验：
 
