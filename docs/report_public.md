@@ -394,6 +394,33 @@ adb shell ss -tnp | grep -E "18080|:443"
 
 ---
 
+## 11.1 证据包（v1.2）
+
+完整证据随报告仓库提供：
+
+```
+evidence/
+├── MANIFEST.md                 # 每个文件的 SHA-256
+├── SHA256SUMS                  # 可直接 sha256sum -c 校验
+├── apk/                        # 4 个 APK（本地保留，不入库）
+├── decompiled/
+│   ├── key/                    # 48 个关键类源码（入库）
+│   └── full/                   # 完整 jadx 源码树（本地保留）
+├── certificates/               # pub.cer / pub.pem / openssl 文本
+├── databases/                  # 仅 schema 与行数
+└── pcap/                       # B / R / A 三次关键抓包
+```
+
+校验：
+
+```bash
+sha256sum -c evidence/SHA256SUMS
+```
+
+> 原始数据库、解密后的 CSV/JSON、含隐私的内部报告均在 `private/`，不随公开仓库分发。
+
+---
+
 ## 12. 限制与声明
 
 - 本报告基于单台设备、单次取证，不代表所有小米机型/系统版本。
