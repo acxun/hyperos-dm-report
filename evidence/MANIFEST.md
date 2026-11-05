@@ -74,9 +74,6 @@
 | `evidence/decompiled/key/SystemHelper/g1/f.java` | 4KB | `c6e9088224e9ada6683220b0e2101142c61a831ea1bf2abbf4034334ae20d218` |
 | `evidence/decompiled/key/SystemHelper/g1/j.java` | 1KB | `c557299ff749e6337e570cd519f07e837bdb729de0a2c2a6ae611482bdfe5665` |
 | `evidence/decompiled/key/SystemHelper/g1/l.java` | 11KB | `4d5096d25c5255e08558a31de4b083be7fe5ef2c78644861e352d7511d18ac4e` |
-| `evidence/pcap/A_20261105_212643.pcap` | 187KB | `f76563a96c7a8100b4c37023ab30ec4e3ed4ade7c9c08947a06490a943e327f8` |
-| `evidence/pcap/B_20261105_203759.pcap` | 4KB | `4e61cfb84ec74f54595f8c8d31dad72068d4259c7e6d635d47a2b5369a1fbce2` |
-| `evidence/pcap/R_20261105_205954.pcap` | 76KB | `1fd74dea0ac9e8e72e1bf58b53d7a539da917228180fcd7670a9c426469090ee` |
 | `evidence/redacted/sample_a_app.json` | 283B | `f2155f7bd722047f2931a0cb4cea3473f75855a2262d4b3a68b9fe477286a3ea` |
 | `evidence/redacted/sample_b_payload.json` | 1KB | `a23b87088da1211a448e9860581aa4fd221bd4eda9bae7cdc50e0399e6491c9a` |
 | `evidence/redacted/sample_r_record.json` | 760B | `f737a3fd994b27b83ae75eea73c6d4fd742d488d2962ac494550c5ce10296c54` |
@@ -117,12 +114,14 @@
 - 仅提供 `.schema.sql` 与 `.counts.csv`（结构与行数），不包含任何数据行
 - 原始 DB 含个人信息，保留在 `private/`，不入库
 
-### PCAP
+### PCAP（原始文件不入库）
 
+- 原始 pcap 已从公开仓库及全部 Git 历史移除，仅保留在本地 `private/pcap/`
 - `B_*.pcap`：1,024 字节设备信息包（429）
 - `R_*.pcap`：68,784 字节信号历史包（429）
 - `A_*.pcap`：40,464 字节 App 清单包（含 429 与 200）
 - 载荷均为 AES 密文，明文不在包内
+- 移除原因：链路层含设备/路由器 MAC、内网 IP、DNS 查询与时间戳
 
 ### 解密数据（private，不入库）
 

@@ -59,7 +59,7 @@
 │   │   └── full/              # 完整源码树（不入库）
 │   ├── certificates/          # pub.cer / pub.pem / openssl 文本
 │   ├── databases/             # 仅 schema 与行数
-│   ├── pcap/                  # B/R/A 三次关键抓包
+│   ├── pcap/                  # 原始抓包仅本地保留（不入库）
 │   └── redacted/              # 脱敏样本
 └── private/                   # 不入库（.gitignore）
     ├── report_internal.md     # 内部版（含隐私数据）

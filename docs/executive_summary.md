@@ -45,7 +45,7 @@
 
 - 公开报告：`docs/report_public.md`（15 页）
 - 证据清单：`evidence/MANIFEST.md`（SHA-256）
-- 抓包：`evidence/pcap/`；反编译关键类：`evidence/decompiled/key/`
+- 抓包：仅本地 `private/pcap/`（不入库）；反编译关键类：`evidence/decompiled/key/`
 
 ### 声明
 

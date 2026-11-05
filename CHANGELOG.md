@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.3 — 2026-11-05
+
+### Changed
+- 隐私清理：从公开仓库及全部 Git 历史移除 `evidence/pcap/*.pcap`（含设备/路由器 MAC、内网 IP、DNS、时间戳）。
+- `.gitignore` 不再为 `evidence/pcap/` 开例外；原始抓包仅保留在本地 `private/pcap/`。
+- MANIFEST / SHA256SUMS / README 同步移除 pcap 条目。
+
 ## v1.2.2 — 2026-11-05
 
 ### Added
