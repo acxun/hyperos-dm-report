@@ -9,3 +9,10 @@ private/
 __pycache__/
 *.pyc
 .DS_Store
+
+# 完整反编译树体积大且含版权代码，仅本地保留
+evidence/decompiled/full/
+
+# 例外：公开证据允许入库
+!evidence/pcap/*.pcap
+!evidence/databases/*.csv

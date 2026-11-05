@@ -48,10 +48,15 @@
 │   ├── decrypt_match.py       # 队列明文匹配 + AES 解密
 │   └── README.md
 ├── evidence/
-│   └── redacted/              # 脱敏后的样本
-│       ├── sample_b_payload.json
-│       ├── sample_r_record.json
-│       └── sample_a_app.json
+│   ├── MANIFEST.md            # 证据清单 + SHA-256
+│   ├── apk/                   # 4 个 APK（不入库）
+│   ├── decompiled/
+│   │   ├── key/               # 关键类反编译源码（入库）
+│   │   └── full/              # 完整源码树（不入库）
+│   ├── certificates/          # pub.cer / pub.pem / openssl 文本
+│   ├── databases/             # 仅 schema 与行数
+│   ├── pcap/                  # B/R/A 三次关键抓包
+│   └── redacted/              # 脱敏样本
 └── private/                   # 不入库（.gitignore）
     ├── report_internal.md     # 内部版（含隐私数据）
     └── *.csv / *.json         # 原始导出

@@ -1,0 +1,10 @@
+CREATE TABLE android_metadata (locale TEXT);
+CREATE TABLE screenshot(_id INTEGER PRIMARY KEY AUTOINCREMENT,screenshort_time INTEGER NOT NULL);
+CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE screen_share(_id INTEGER PRIMARY KEY AUTOINCREMENT,screen_share_package_name TEXT NOT NULL,screen_share_start_time INTEGER NOT NULL,screen_share_end_time INTEGER NOT NULL,is_active INTEGER NOT NULL,duration INTEGER NOT NULL);
+CREATE TABLE call_forwarding(_id INTEGER PRIMARY KEY AUTOINCREMENT,reason INTEGER NOT NULL,enabled INTEGER NOT NULL,timestamp INTEGER NOT NULL);
+CREATE TABLE airplane_mode(_id INTEGER PRIMARY KEY AUTOINCREMENT,airplane_mode_on INTEGER NOT NULL,airplane_mode_change_time INTEGER NOT NULL);
+CREATE TABLE fraud_phone(_id INTEGER PRIMARY KEY AUTOINCREMENT,call_start_time INTEGER NOT NULL,call_end_time INTEGER NOT NULL,is_fraud_call INTEGER NOT NULL,tel_location TEXT NOT NULL,tel_number_md5 TEXT NOT NULL,operator TEXT NOT NULL,is_chinese_number INTEGER NOT NULL,is_virtual_operator INTEGER NOT NULL,is_active INTEGER NOT NULL,duration INTEGER NOT NULL);
+CREATE TABLE voip_record(_id INTEGER PRIMARY KEY AUTOINCREMENT,voip_record_package_name TEXT NOT NULL,voip_record_start_time INTEGER NOT NULL,voip_record_end_time INTEGER NOT NULL,is_active INTEGER NOT NULL,is_fraud_call INTEGER NOT NULL,duration INTEGER NOT NULL);
+CREATE TABLE fraud_url(_id INTEGER PRIMARY KEY AUTOINCREMENT,access_time INTEGER NOT NULL,url_type INTEGER NOT NULL);
+CREATE TABLE install_app(_id INTEGER PRIMARY KEY AUTOINCREMENT,pkg_name TEXT NOT NULL,app_name TEXT NOT NULL,source TEXT NOT NULL,version_code INTEGER NOT NULL,md5 TEXT NOT NULL,install_finish_time INTEGER NOT NULL,app_tag_id INTEGER NOT NULL,security_tag_id INTEGER NOT NULL);

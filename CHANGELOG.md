@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2 — 2026-11-05
+
+### Added
+- 证据补全：4 个 APK、完整反编译树（本地）、关键类源码、证书、数据库 schema、关键 pcap。
+- `evidence/MANIFEST.md`：全部证据文件的 SHA-256 清单。
+- `.gitignore`：完整反编译树与 APK 不入库，关键证据（pcap/schema/源码）入库。
+
 ## v1.1 — 2026-11-05
 
 ### Added
