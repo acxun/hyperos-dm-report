@@ -3,9 +3,11 @@
 > 对一台 Xiaomi HyperOS 3.0（Android 16）设备的静态与动态分析。
 > 记录两套运营商终端管理（DM）客户端、系统遥测组件与本地反诈数据库的行为、协议与安全问题。
 
-- 报告版本：v1.0（2026-11-05）
+- 报告版本：v1.2.2（2026-11-05）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
 - 公开报告：[`docs/report_public.md`](docs/report_public.md)
+- 执行摘要：[`docs/executive_summary.md`](docs/executive_summary.md)
+- PDF：[`dist/report_public.pdf`](dist/report_public.pdf) / [`dist/executive_summary.pdf`](dist/executive_summary.pdf)
 - 已知缺口：[`docs/gaps.md`](docs/gaps.md)
 - IOC 清单：[`docs/iocs.md`](docs/iocs.md)
 
@@ -41,8 +43,10 @@
 ├── .gitignore
 ├── docs/
 │   ├── report_public.md       # 公开版报告（已脱敏）
+│   ├── executive_summary.md   # 执行摘要
 │   ├── gaps.md                # 已知缺口与后续工作
 │   └── iocs.md                # 域名 / IP / 包名 / 哈希
+├── dist/                      # 生成的 PDF
 ├── tools/
 │   ├── pcap_tcp.py            # 纯 Python 的 pcap / TCP 流重组
 │   ├── decrypt_match.py       # 队列明文匹配 + AES 解密

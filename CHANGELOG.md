@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.2 — 2026-11-05
+
+### Added
+- 执行摘要 `docs/executive_summary.md`（2 页）
+- PDF：`dist/executive_summary.pdf`、`dist/report_public.pdf`（15 页）
+- 构建脚本 `tools/build_pdf.py`（Markdown → HTML → PDF，via LibreOffice）
+
+### Changed
+- README 增加摘要与 PDF 入口。
+
 ## v1.2.1 — 2026-11-05
 
 ### Changed
