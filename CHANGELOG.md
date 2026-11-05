@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.2.5 — 2026-11-05
+
+### Added
+- 处置验证（实测）：
+  - `operator_service_improve_plan=0` 只停联通 DM（18080 零流量），移动 DM 仍连 443。
+  - `pm disable-user com.miui.dmregservice` 后无进程、无 443/5683 流量。
+  - **重启验证**：禁用状态保持，无闹钟、无进程、无流量。
+- `docs/report_public.md` / `private/report_internal.md` 新增「10.1 处置验证」。
+- `docs/executive_summary.md` 补充移动 DM 的处置与重启结论。
+- `docs/gaps.md`：P0-3、P0-4 标记为部分完成。
+
+### Changed
+- 重新生成 `dist/report_public.pdf` 与 `dist/executive_summary.pdf`。
+
 ## v1.2.4 — 2026-11-05
 
 ### Fixed

@@ -40,6 +40,9 @@
 > 用户侧一条命令即可关闭联通 DM 总闸：
 > `settings put secure operator_service_improve_plan 0`
 > 注意：该开关**只控制联通 DM**，移动 DM 由云端开关单独控制。
+>
+> 移动 DM 需整包禁用：`pm disable-user --user 0 com.miui.dmregservice`。
+> 实测：禁用后进程不启动、无 443/5683 流量，**重启后仍禁用、无闹钟、不复活**。
 
 ### 证据
 

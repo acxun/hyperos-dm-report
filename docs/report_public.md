@@ -358,6 +358,43 @@ adb shell su -c 'pm disable-user --user 0 com.miui.dmregservice'
 
 ---
 
+## 10.1 处置验证（实测）
+
+### 总闸：`operator_service_improve_plan`
+
+同一触发方式，只改该设置：
+
+| 设置 | SystemHelper → `18080` | DMReg → `117.134.71.39:443` |
+|---|---|---|
+| `0` | **0 包** | **21 包**（完整 TLS） |
+| `1` | **48 KB**（B 1,024 + A 40,464，`200 OK`） | — |
+
+结论：该开关**只停联通 DM**（`com.mobiletools.systemhelper`），不影响移动 DM（`com.miui.dmregservice`）。
+
+### 移动 DM：整包禁用
+
+```bash
+adb shell su -c 'pm disable-user --user 0 com.miui.dmregservice'
+```
+
+| 检查项 | 结果 |
+|---|---|
+| 包状态 | `enabled=3`（DISABLED_USER） |
+| 进程 | 无 |
+| 主动触发 `HEARTBEAT` | 广播完成，但**进程未启动** |
+| 抓包（443 / 5683） | **0 包** |
+| **重启后** | 仍 disabled；无进程、无闹钟、无流量 |
+
+回滚：
+
+```bash
+adb shell su -c 'pm enable com.miui.dmregservice'
+```
+
+> 副作用（通话/短信/数据/5G/VoLTE）尚未逐项验证，建议禁用后观察 24–48 小时。
+
+---
+
 ## 11. 附录：IOC
 
 **域名 / IP**
