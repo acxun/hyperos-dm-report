@@ -3,7 +3,6 @@
 > 对一台 Xiaomi HyperOS 3.0（Android 16）设备的静态与动态分析。
 > 记录两套运营商终端管理（DM）客户端、系统遥测组件与本地反诈数据库的行为、协议与安全问题。
 
-- 报告版本：v1.2.2（2026-11-05）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
 - 公开报告：[`docs/report_public.md`](docs/report_public.md)
 - 执行摘要：[`docs/executive_summary.md`](docs/executive_summary.md)
