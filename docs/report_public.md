@@ -289,13 +289,17 @@ b();             // 读日志开关
 
 ## 7. 发现五：AI 通话防诈（`com.miui.guardprovider`）
 
-- 权限：`CAPTURE_AUDIO_OUTPUT` / `CAPTURE_VOICE_COMMUNICATION_OUTPUT` / `CAPTURE_VIDEO_OUTPUT` / `MANAGE_MEDIA_PROJECTION` 均为 install granted
-- 代码证据：
-  - `p079l1/d.java`：通过反射获取 `MediaProjectionManager.mService`，直接调用 `createProjection`，绕过系统授权弹窗
-  - `p079l1/a.java`：`MediaRecorder` 720×1280 / 24 fps / 1 Mbps 录屏
-  - `AiGuardService.C()`：`clip.mp4` → Base64 → `detection-aigc.engine.miui.com`
-- 状态：`ai_guard_function_switch = 0`，`ai_guard_function_available = false`，GuardProvider 进程未运行，`RECORD_AUDIO` 运行时权限未授予，`voip_record`/`screen_share` 为空
-- 结论：**能力存在，未启用**
+> 一句话：这不是通用录屏工具。**录屏触发范围仅限微信/QQ 通话**；一旦触发，采集的是**整屏**，屏幕上是任何 App 都会进入画面。当前开关为 0，未启用。
+
+### 7.0 定位与边界
+
+| 维度 | 范围 |
+|---|---|
+| 触发 App | **仅 `com.tencent.mm`（微信）与 `com.tencent.mobileqq`（QQ）** |
+| 触发场景 | 语音/视频通话界面在前台（特定 Activity） |
+| 采集范围 | **整屏镜像**（`AUTO_MIRROR` + 全屏尺寸） |
+| 产物 | `clip.mp4` → Base64 → 上传 `detection-aigc.engine.miui.com` |
+| 当前状态 | 开关 0、`RECORD_AUDIO` 未授权、无活跃 projection、无 clip 文件 |
 
 ### 7.1 录屏与上传链路
 
@@ -313,7 +317,7 @@ b();             // 读日志开关
   - 上传后 `Files.delete(path)`（成功失败都删）
 - 音频文本走另一条：`POST /ai/audio/text/pcc/detection`
 
-因为 `AUTO_MIRROR` + 整屏尺寸，**当前屏幕上显示的任何 App 都会被录进去**；它不支持“只录某个 App”。
+因为 `AUTO_MIRROR` + 整屏尺寸，**录制范围是整屏，不是“只录微信”**；录制期间切到任何 App 都会被录进去。
 
 ### 7.2 触发链
 
@@ -328,7 +332,7 @@ SecurityCenter AiGuardSceneService
         COMMAND=2  VIDEO_SCAM_SCENE=<scene>  CAPABILITIES=<bits>
 ```
 
-- 包名白名单：`com.tencent.mm`、`com.tencent.mobileqq`
+- 包名白名单：**只有** `com.tencent.mm`、`com.tencent.mobileqq`
 - 场景值：QQ `{3,1}`，微信 `{4,2}`
 - `CAPABILITIES & 1` → 语音检测；`CAPABILITIES & 2` 且 `isUsingCamera` → 视频检测
 - `AiGuardService.onStartCommand`：
@@ -336,45 +340,28 @@ SecurityCenter AiGuardSceneService
   - `COMMAND=1`：语音检测，要求 `RECORD_AUDIO`
   - `COMMAND=2`：视频检测 → `P(scene)` → 录制 → `C(Path)` 上传
 
-### 7.3 屏幕共享监控与自豁免
+### 7.3 三种“看屏幕”不是同一件事
 
-- `MiFraudDetectionService` 通过 `AppOpsManager.startWatchingActive` 监听 op `10042`（投屏/录屏）
-- 命中后写入 `screen_share` 表：包名、起止时间、时长
-- 另有两处反射读取 `MediaProjectionManager.getActiveProjectionInfo()`，可直接拿到当前投屏包名
-- 安全中心还能通过反射调用 `stopActiveProjection()` 强制停止投屏
+| 功能 | 触发范围 | 采集范围 | 存什么 |
+|---|---|---|---|
+| AI 防诈录屏 | **仅微信/QQ 通话** | **整屏镜像** | `clip.mp4` 上传 |
+| 截屏记录 | 任何 App（用户截屏） | 仅事件 | 毫秒时间戳 |
+| 屏幕共享记录 | 任何 App（除忽略名单） | 仅包名 | 包名 + 起止 + 时长 |
 
-忽略名单（`res/values/arrays.xml`）：
+### 7.4 局限性
 
-```xml
-<array name="pm_screen_share_xsof_fraud_detection_ignore_apps">
-    <item>com.miui.guardprovider</item>   <!-- 自己 -->
-    <item>com.milink.service</item>
-    <item>com.xiaomi.mirror</item>
-    <item>com.miui.player</item>
-    <item>com.tencent.tmgp.sgame</item>
-    <item>com.xiaomi.migameservice</item>
-    <item>com.xiaomi.aiasst.vision</item>
-</array>
-```
-
-即：GuardProvider 自己的录屏**不会被记入 `screen_share`**。
-
-另外两个名单：
-
-- `pm_screen_share_black_apps`：系统/第三方录屏 App
-- `pm_screen_share_high_risk_apps`：微信、QQ、支付宝、各大银行、相册
-
-### 7.4 截图数据流
-
-截图 App（`com.miui.screenshot`）保存后做三件事：
-
-1. 发 `miui.intent.TAKE_SCREENSHOT`，只带 `IsFinished=true` → 反诈服务只写毫秒时间戳
-2. 发 `miui.intent.action.SAVE_TO_CLOUD_GALLERY`，带**文件路径**给 `com.miui.gallery`（标准云相册同步，取决于用户是否开启）
-3. 调 `j.e()/j.g()`，把**文件名**发给 `com.miui.bugreport` / `com.jtom.userprobation`
-
-第 3 条需要目标包声明 `support_screenshot_feedback=true`；本机这两个包**都未安装**，因此不触发。
-
-截图 App 本身**没有任何 HTTP/上传代码**。
+1. **触发面很窄**：只覆盖微信、QQ；Telegram、WhatsApp、Signal、钉钉、飞书等都不在列表。
+2. **依赖特定 Activity**：微信 `com.tencent.mm.plugin.voip.ui.VideoActivity`、QQ `com.tencent.av.ui.AVActivity`；版本更新、小窗、分屏、悬浮窗都可能导致匹配失败。
+3. **视频依赖 `isUsingCamera`**：纯语音通话只走音频检测，不触发视频录制。
+4. **依赖 `RECORD_AUDIO`**：权限被撤销时，代码直接打印 "permissions revoked" 并跳过。
+5. **依赖 `CAPABILITIES` 位**：bit1 语音、bit2 视频，由云端配置下发；位不满足就不启动。
+6. **依赖云端开关**：`ai_guard_function_available` 与 `ai_guard_function_switch` 任一不满足都不会启动。
+7. **当前版本录制类无可见调用点**：`p079l1/a.java` 在反编译结果中没有被其它类引用，JADX 对视频协程存在还原缺口；视频录制是否已接线无法仅凭静态分析确认。
+8. **全屏镜像的副作用**：一旦开始录，切到银行、密码、聊天等任何界面都会被录进 `clip.mp4`；不是“只录微信/QQ”。
+9. **只在通话期间**：不是 7×24 录屏；通话结束即停止。
+10. **自身录屏不进 `screen_share`**：`com.miui.guardprovider` 在忽略名单里，安全中心不会记录它自己的录屏。
+11. **音频冲突/过热**：代码有音频冲突时停止的日志；过热中断未在代码中确认。
+12. **不可见性**：录屏与上传没有用户可见确认；Android 14+ 可能显示隐私指示器，但授权对话框被绕过。
 
 ### 7.5 当前运行状态
 
@@ -388,7 +375,7 @@ SecurityCenter AiGuardSceneService
 | `ai_guard_daily_report.xml` | 空 |
 | `screen_share` / `voip_record` | 0 行 |
 
-> `p079l1/a.java`（录制类）在当前 APK 的反编译结果中没有可见调用点，JADX 对视频检测协程存在代码还原缺口；因此“视频录制是否已接线”无法仅凭静态分析 100% 确认。
+> 结论：**能力存在，但触发面窄、依赖多、当前未启用；一旦启用，录制范围是整屏，而不是仅微信/QQ。**
 
 ---
 
