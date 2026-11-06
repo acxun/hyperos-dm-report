@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.6 — 2026-11-06
+
+### Added
+- Release `artifacts-v1.2.5`：完整 4 个 APK + 4 套 JADX 源码树（19,854 个 .java），
+  `hyperos_dm_artifacts_v1.tar.zst`（79,837,011 字节）。
+- README 增加 Release 入口。
+
 ## v1.2.5 — 2026-11-05
 
 ### Added
