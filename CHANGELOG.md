@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.0 — 2026-11-06
+
+### Removed
+- 按作者要求，删除公开版与内部版的「10.1 处置验证（实测）」与「10.2 远程唤醒与触发能力评估」整段。
+- 执行摘要移除对应的处置实测结论。
+
+### Changed
+- 重新生成 `dist/report_public.pdf` 与 `dist/executive_summary.pdf`。
+
 ## v1.2.9 — 2026-11-06
 
 ### Fixed
