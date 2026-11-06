@@ -63,6 +63,17 @@
 - 现状：移动 DM 走 HTTPS，未验证证书链、是否 pinning、是否校验证书。
 - 补法：MITM 或 `openssl s_client` 对比。
 
+### 10.1 AI 防诈录屏/上传链路未实测
+
+- 现状：代码链路已还原（`p079l1` → `AiGuardService.C(Path)` → `/aiVideo/pcc/detection`），但 `ai_guard_function_switch=0`、`RECORD_AUDIO` 未授权、无活跃 MediaProjection。
+- 缺口：`p079l1/a.java` 在反编译结果中无可见调用点，视频路径是否接线无法仅凭静态分析确认。
+- 补法：在可回滚前提下打开开关并授予 `RECORD_AUDIO`，发起一次微信/QQ 视频通话，观察 `cache/clip_*`、`dumpsys media_projection`、`detection-aigc.engine.miui.com` 流量。
+
+### 10.2 远程唤醒/触发已评估
+
+- 结论：两套 DM 均无 push/网络监听；触发源只有闹钟、系统广播、本地导出组件、运营商 SMS/STK（间接）。
+- 已写入报告 10.2 节。
+
 ---
 
 ## P2：覆盖范围缺口

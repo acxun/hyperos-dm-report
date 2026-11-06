@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.2.7 — 2026-11-06
+
+### Added
+- 报告新增：
+  - 7.1 录屏与上传链路（`clip.mp4` → `/aiVideo/pcc/detection`）
+  - 7.2 触发链（`AiGuardSceneService`、微信/QQ VOIP、`COMMAND=1/2/3`）
+  - 7.3 屏幕共享监控与 GuardProvider 自豁免
+  - 7.4 截图数据流（仅时间戳；bugreport/userprobation 未安装）
+  - 10.2 远程唤醒与触发能力评估（无 push/网络监听）
+- 执行摘要补充第 6 条发现与远程触发结论。
+- `docs/gaps.md` 新增 10.1（录屏链路未实测）、10.2（远程评估已完成）。
+
+### Changed
+- 重新生成 `dist/report_public.pdf` 与 `dist/executive_summary.pdf`。
+
 ## v1.2.6 — 2026-11-06
 
 ### Added

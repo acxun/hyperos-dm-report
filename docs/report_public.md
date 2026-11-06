@@ -297,6 +297,99 @@ b();             // 读日志开关
 - 状态：`ai_guard_function_switch = 0`，`ai_guard_function_available = false`，GuardProvider 进程未运行，`RECORD_AUDIO` 运行时权限未授予，`voip_record`/`screen_share` 为空
 - 结论：**能力存在，未启用**
 
+### 7.1 录屏与上传链路
+
+- `p079l1/d.java`：反射 `MediaProjectionManager.mService` → 直接 `createProjection`，绕过系统授权对话框
+- `p079l1/a.java`：
+  - `createVirtualDisplay("ScreenRecorder", 整屏宽, 整屏高, dpi, 16, ...)`
+  - `16` = `VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR`
+  - `MediaRecorder` 720×1280 / 24fps / 1Mbps
+  - 临时文件 `cache/clip_*`
+- `AiGuardService.C(Path)`：
+  - `Files.readAllBytes` → Base64
+  - JSON：`{"streamName":"clip.mp4","fileBase64":"...","requestId":"..."}`
+  - 经 `com.miui.securitycenter.confidentialcomputing` 加密为 `EncryptedData`
+  - `POST https://detection-aigc.engine.miui.com/aiVideo/pcc/detection`
+  - 上传后 `Files.delete(path)`（成功失败都删）
+- 音频文本走另一条：`POST /ai/audio/text/pcc/detection`
+
+因为 `AUTO_MIRROR` + 整屏尺寸，**当前屏幕上显示的任何 App 都会被录进去**；它不支持“只录某个 App”。
+
+### 7.2 触发链
+
+```
+SecurityCenter AiGuardSceneService
+  ├─ 监听 miui.media.AUDIO_VOIP_RECORD_STATE_CHANGED_ACTION
+  ├─ 监听前台 Activity（IProcessObserver）
+  │    ├─ com.tencent.mm.plugin.voip.ui.VideoActivity   → 微信
+  │    └─ com.tencent.av.ui.AVActivity                  → QQ
+  └─ startForegroundService(com.miui.guardprovider/.aiguard.AiGuardService)
+        COMMAND=1  PHONE_SCAM_SCENE=<scene>  CAPABILITIES=<bits>
+        COMMAND=2  VIDEO_SCAM_SCENE=<scene>  CAPABILITIES=<bits>
+```
+
+- 包名白名单：`com.tencent.mm`、`com.tencent.mobileqq`
+- 场景值：QQ `{3,1}`，微信 `{4,2}`
+- `CAPABILITIES & 1` → 语音检测；`CAPABILITIES & 2` 且 `isUsingCamera` → 视频检测
+- `AiGuardService.onStartCommand`：
+  - `COMMAND=3`：只同步 `ai_guard_function_switch`
+  - `COMMAND=1`：语音检测，要求 `RECORD_AUDIO`
+  - `COMMAND=2`：视频检测 → `P(scene)` → 录制 → `C(Path)` 上传
+
+### 7.3 屏幕共享监控与自豁免
+
+- `MiFraudDetectionService` 通过 `AppOpsManager.startWatchingActive` 监听 op `10042`（投屏/录屏）
+- 命中后写入 `screen_share` 表：包名、起止时间、时长
+- 另有两处反射读取 `MediaProjectionManager.getActiveProjectionInfo()`，可直接拿到当前投屏包名
+- 安全中心还能通过反射调用 `stopActiveProjection()` 强制停止投屏
+
+忽略名单（`res/values/arrays.xml`）：
+
+```xml
+<array name="pm_screen_share_xsof_fraud_detection_ignore_apps">
+    <item>com.miui.guardprovider</item>   <!-- 自己 -->
+    <item>com.milink.service</item>
+    <item>com.xiaomi.mirror</item>
+    <item>com.miui.player</item>
+    <item>com.tencent.tmgp.sgame</item>
+    <item>com.xiaomi.migameservice</item>
+    <item>com.xiaomi.aiasst.vision</item>
+</array>
+```
+
+即：GuardProvider 自己的录屏**不会被记入 `screen_share`**。
+
+另外两个名单：
+
+- `pm_screen_share_black_apps`：系统/第三方录屏 App
+- `pm_screen_share_high_risk_apps`：微信、QQ、支付宝、各大银行、相册
+
+### 7.4 截图数据流
+
+截图 App（`com.miui.screenshot`）保存后做三件事：
+
+1. 发 `miui.intent.TAKE_SCREENSHOT`，只带 `IsFinished=true` → 反诈服务只写毫秒时间戳
+2. 发 `miui.intent.action.SAVE_TO_CLOUD_GALLERY`，带**文件路径**给 `com.miui.gallery`（标准云相册同步，取决于用户是否开启）
+3. 调 `j.e()/j.g()`，把**文件名**发给 `com.miui.bugreport` / `com.jtom.userprobation`
+
+第 3 条需要目标包声明 `support_screenshot_feedback=true`；本机这两个包**都未安装**，因此不触发。
+
+截图 App 本身**没有任何 HTTP/上传代码**。
+
+### 7.5 当前运行状态
+
+| 检查项 | 结果 |
+|---|---|
+| `ai_guard_function_switch` | 0 |
+| `ai_guard_function_available` | false |
+| `RECORD_AUDIO` | granted=false |
+| 活跃 MediaProjection | null |
+| `cache/clip_*` | 无 |
+| `ai_guard_daily_report.xml` | 空 |
+| `screen_share` / `voip_record` | 0 行 |
+
+> `p079l1/a.java`（录制类）在当前 APK 的反编译结果中没有可见调用点，JADX 对视频检测协程存在代码还原缺口；因此“视频录制是否已接线”无法仅凭静态分析 100% 确认。
+
 ---
 
 ## 8. 安全与合规问题
@@ -392,6 +485,36 @@ adb shell su -c 'pm enable com.miui.dmregservice'
 ```
 
 > 副作用（通话/短信/数据/5G/VoLTE）尚未逐项验证，建议禁用后观察 24–48 小时。
+
+---
+
+## 10.2 远程唤醒与触发能力评估
+
+### 结论
+
+两套 DM 均**没有**注册小米推送 / MiPush，也没有监听网络的常驻服务。服务端无法从公网直接“热启动”进程或“立即触发”一次采集/上传。
+
+### 触发源
+
+| 触发源 | 能否远程 | 说明 |
+|---|---|---|
+| 定时闹钟 | ❌ 本地 | SystemHelper 30min/24h；DMReg 24h 心跳 |
+| 系统广播 | ⚠️ 间接 | 开机、换卡、联网；远程只能通过重启/换卡间接 |
+| 导出组件 | ❌ 需本机 App | 任意本地 App 可发广播触发 |
+| 运营商 SMS/STK | ⚠️ 间接 | 仅 DMReg 可能，经电话/短信系统 App 转发 |
+| 云端配置 | ⚠️ 只改参数 | 改开关/间隔，下次心跳生效 |
+| 网络监听/长连接 | ❌ 不存在 | 两个包都没有监听端口或 push |
+
+### 实测
+
+- `SystemHelper` / `DMRegService` 的 manifest 中 `mipush` / `xmpush` 关键字均为 **0 处**
+- 所有已观察到的启动均由 **Alarm** 或**本地广播**触发
+- `pm disable-user` 后，DMReg 重启后仍禁用、无闹钟、无进程、无流量
+
+### 服务端仍能做到
+
+- 在心跳响应里下发配置（开关、间隔），下次生效
+- 接收已上报的数据
 
 ---
 
