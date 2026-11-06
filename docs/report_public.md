@@ -22,7 +22,7 @@
 
 主要结论：
 
-1. `SystemHelper` 以 30 分钟为周期采集位置、基站、WiFi，并周期上报设备标识、SIM 标识（部分打码）、经纬度（6 位小数）、行政区、基站参数、WiFi 信息、存储信息，以及全量 App 使用清单。
+1. `SystemHelper` **每 30 分钟采集**位置、基站、WiFi 并写入本地队列；**实际上报频率不是 30 分钟**：信号历史默认 **12 小时**一次、App 清单 **24 小时**一次，设备信息由开机/换卡/联网事件触发。上报内容包含设备标识、SIM 标识（部分打码）、经纬度（6 位小数）、行政区、基站参数、WiFi 信息、存储信息与 App 使用清单。
 2. 上报链路为 **明文 HTTP + AES-128-ECB**，且 **AES key = MD5(明文)**；`sign` 参数是 **RSA(1024 位公钥, MD5)**。由于 key 由明文派生，取得本地明文即可还原网络密文（已实测）。
 3. `DMRegService` 采集 App 清单、完整 SIM 标识、基站/WiFi、按小时流量（含路由器 MAC 与公网 IP）、蓝牙/WiFi 列表，上报开关由云端配置控制。
 4. 两套 DM 均存在 **无权限保护的导出组件**，本机任意应用可重定向上报地址或触发上报。
@@ -131,6 +131,21 @@ if (Settings.Secure.getInt("operator_service_improve_plan", 0) != 1) return fals
 if (!networkConnected()) return false;
 return (isWifi && mnc.startsWith("460")) || (!isWifi && isUnicom);
 ```
+
+### 3.5.1 采集频率 ≠ 上报频率
+
+| 动作 | 周期 | 代码/默认值 |
+|---|---|---|
+| 信号/位置**采集**（写本地 `signal` 表） | **30 分钟** | `GetsignalInfoInterval = 1800000` |
+| 信号历史**上报**（R） | **默认 12 小时** | `signalInfoInterval = 43200000`；首次为随机 init(0–24h) + 12h |
+| App 清单**上报**（A） | **24 小时** | `appInfoInterval = 86400000` |
+| 调度/设备信息（S） | **24 小时** | `scheduleInterval = 86400000` |
+| 设备信息（B/F） | **事件触发** | 开机、换卡、联网、开机后 4 分钟 |
+| DMReg 心跳 | 24 小时 | `heartbeat_interval = 86400000` |
+| DMReg App 采集 | 7 天 | `app_heartbeat_interval = 604800000` |
+
+> **30 分钟只是“采集到本地”，不是“每 30 分钟上报”。**
+> 这也解释了为什么抓到的 R 包一次包含 56/100 条记录，而不是 1 条。
 
 ### 3.6 抓包/解密结果（脱敏）
 
@@ -485,7 +500,7 @@ adb shell su -c 'pm enable com.miui.dmregservice'
 
 | 触发源 | 能否远程 | 说明 |
 |---|---|---|
-| 定时闹钟 | ❌ 本地 | SystemHelper 30min/24h；DMReg 24h 心跳 |
+| 定时闹钟 | ❌ 本地 | SystemHelper：采集 30min，上报 R 12h / A 24h；DMReg：24h 心跳 |
 | 系统广播 | ⚠️ 间接 | 开机、换卡、联网；远程只能通过重启/换卡间接 |
 | 导出组件 | ❌ 需本机 App | 任意本地 App 可发广播触发 |
 | 运营商 SMS/STK | ⚠️ 间接 | 仅 DMReg 可能，经电话/短信系统 App 转发 |
