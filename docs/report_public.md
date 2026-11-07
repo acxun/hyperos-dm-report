@@ -1,7 +1,7 @@
 # 小米 HyperOS 预装运营商 DM 组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.0
-- 日期：2026-11-05
+- 版本：v1.3.2
+- 日期：2026-11-07
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
 - 说明：本文已移除全部个人隐私数据，仅保留技术事实与可复现方法
@@ -304,7 +304,7 @@ b();             // 读日志开关
 
 ## 7. 发现五：AI 通话防诈（`com.miui.guardprovider`）
 
-> 一句话：这不是通用录屏工具。**录屏触发范围覆盖普通电话（未知号码）与微信/QQ 通话**；一旦触发，采集的是**整屏**，屏幕上是任何 App 都会进入画面。当前开关为 0，未启用。
+> 一句话：这不是通用录屏工具。**录屏触发范围覆盖普通电话（未知号码）与微信/QQ 通话**；一旦触发，采集的是**整屏**，屏幕上是任何 App 都会进入画面。视频检测路径为**每轮录 3 秒 → 上传 → 未命中隔 2 秒再录**。当前开关为 0，未启用。
 
 ### 7.0 定位与边界
 
@@ -313,7 +313,7 @@ b();             // 读日志开关
 | 触发范围 | **普通电话（未知号码）+ `com.tencent.mm`（微信）+ `com.tencent.mobileqq`（QQ）** |
 | 触发场景 | 语音/视频通话界面在前台（特定 Activity） |
 | 采集范围 | **整屏镜像**（`AUTO_MIRROR` + 全屏尺寸） |
-| 产物 | `clip.mp4` → Base64 → 上传 `detection-aigc.engine.miui.com` |
+| 产物 | 每段 3 秒的 `clip.mp4` → Base64 → 上传 `detection-aigc.engine.miui.com` |
 | 当前状态 | 开关 0、`RECORD_AUDIO` 未授权、无活跃 projection、无 clip 文件 |
 
 ### 7.1 录屏与上传链路
@@ -322,7 +322,7 @@ b();             // 读日志开关
 - `p079l1/a.java`：
   - `createVirtualDisplay("ScreenRecorder", 整屏宽, 整屏高, dpi, 16, ...)`
   - `16` = `VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR`
-  - `MediaRecorder` 720×1280 / 24fps / 1Mbps
+  - `MediaRecorder` 720×1280 / 24fps / 1Mbps；每次录制 3 秒（见 §7.1.1）
   - 临时文件 `cache/clip_*`
 - `AiGuardService.C(Path)`：
   - `Files.readAllBytes` → Base64
@@ -331,6 +331,39 @@ b();             // 读日志开关
   - `POST https://detection-aigc.engine.miui.com/aiVideo/pcc/detection`
   - 上传后 `Files.delete(path)`（成功失败都删）
 - 音频文本走另一条：`POST /ai/audio/text/pcc/detection`
+
+### 7.1.1 视频检测循环：录 3 秒 → 上传 → 未命中隔 2 秒 → 再录
+
+`AiGuardService$p.A`（`COMMAND=2` 视频检测协程）是一个 `while (scope.isActive)` 循环：
+
+```kotlin
+while (scope.isActive) {
+    recorder.c()                 // MediaRecorder.start()
+    delay(3.seconds)             // U3.c.o(3, SECONDS)
+    val clip = recorder.d()      // MediaRecorder.stop()，返回 cache/clip_*
+    if (clip != null) {
+        val hit = C(clip)        // Base64 → 加密 → POST /aiVideo/pcc/detection
+        if (hit) {               // checkRes == true
+            u(scene)             // 弹警告
+            stopSelf()
+            break
+        }
+        Files.delete(clip)       // 未命中，删除
+    }
+    delay(2.seconds)             // U3.c.o(2, SECONDS)
+}
+recorder.b()                     // MediaRecorder.release()
+```
+
+- `3` 和 `2` 是方法内硬编码常量（`r6=3`、`r7=2`），不来自云端配置。
+- 实际周期 = 3 秒录制 + 上传/等待云端响应 + 2 秒间隔，不是严格的“每 3 秒一次”。
+- 命中后弹警告并 `stopSelf()`；未命中删除 `clip`，等 2 秒后继续。
+- 若录制返回空（例如 `stop()` 失败），直接重试，不进入 2 秒等待。
+- 单次服务生命周期由云端配置 `detectionServiceLifetimeThresholdInMinutes` 限制，默认 10 分钟；通话结束或服务停止时协程取消。
+- 该循环只在 `COMMAND=2`（视频检测）路径；`COMMAND=1`（语音）走 ASR 文本检测，不使用这段录屏循环。
+- 本节基于 `2.5.6-20251106.0`；`3.1.4` 更新包未逐版本比对。
+
+> 取证说明：JADX 默认模式在 `AiGuardService$p.A` 抛 `JadxOverflowException`，方法体被标记为 “not decompiled”。改用 `jadx --show-bad-code --comments-level debug` 重反编译后取得上述 smali 伪代码；`U3.c.o(n, SECONDS)` 与 `V3.W.b(...)`（Kotlin `delay`）已交叉确认。此前“录制类无可见调用点”的表述据此撤回。
 
 因为 `AUTO_MIRROR` + 整屏尺寸，**录制范围是整屏，不是“只录微信”**；录制期间切到任何 App 都会被录进去。
 
@@ -355,7 +388,7 @@ SecurityCenter AiGuardSceneService
 - `AiGuardService.onStartCommand`：
   - `COMMAND=3`：只同步 `ai_guard_function_switch`
   - `COMMAND=1`：语音检测，要求 `RECORD_AUDIO`
-  - `COMMAND=2`：视频检测 → `P(scene)` → 录制 → `C(Path)` 上传
+  - `COMMAND=2`：视频检测 → `P(scene)` → `p.A` 3 秒循环 → 每段 `C(Path)` 上传
 
 ### 7.3 三种“看屏幕”不是同一件事
 
@@ -370,10 +403,10 @@ SecurityCenter AiGuardSceneService
 1. **触发面有限**：覆盖普通电话（未知号码）与微信/QQ；Telegram、WhatsApp、Signal、钉钉、飞书等不在列表。
 2. **依赖特定 Activity**：微信 `com.tencent.mm.plugin.voip.ui.VideoActivity`、QQ `com.tencent.av.ui.AVActivity`；版本更新、小窗、分屏、悬浮窗都可能导致匹配失败。
 3. **视频依赖 `isUsingCamera`**：纯语音通话只走音频检测，不触发视频录制。
-4. **依赖 `RECORD_AUDIO`**：权限被撤销时，代码直接打印 "permissions revoked" 并跳过。
+4. **`RECORD_AUDIO` 只约束语音路径**：`COMMAND=1` 在权限被撤销时打印 "permissions revoked" 并跳过；`COMMAND=2` 视频路径不检查该运行时权限，依赖 `MediaProjection` 与 `CAPTURE_VIDEO_OUTPUT`。
 5. **依赖 `CAPABILITIES` 位**：bit1 语音、bit2 视频，由云端配置下发；位不满足就不启动。
 6. **依赖云端开关**：`ai_guard_function_available` 与 `ai_guard_function_switch` 任一不满足都不会启动。
-7. **当前版本录制类无可见调用点**：`p079l1/a.java` 在反编译结果中没有被其它类引用，JADX 对视频协程存在还原缺口；视频录制是否已接线无法仅凭静态分析确认。
+7. **3 秒/2 秒是硬编码节奏**：每轮固定录 3 秒，未命中后固定等 2 秒；上传与云端响应时间会拉长实际周期。视频路径已确认接线，调用点为 `AiGuardService$p.A`（见 §7.1.1）。
 8. **全屏镜像的副作用**：一旦开始录，切到银行、密码、聊天等任何界面都会被录进 `clip.mp4`；不是“只录微信/QQ”。
 9. **只在通话期间**：不是 7×24 录屏；通话结束即停止。
 10. **自身录屏不进 `screen_share`**：`com.miui.guardprovider` 在忽略名单里，安全中心不会记录它自己的录屏。
@@ -386,13 +419,15 @@ SecurityCenter AiGuardSceneService
 |---|---|
 | `ai_guard_function_switch` | 0 |
 | `ai_guard_function_available` | false |
-| `RECORD_AUDIO` | granted=false |
+| `RECORD_AUDIO`（仅语音路径） | granted=false |
 | 活跃 MediaProjection | null |
 | `cache/clip_*` | 无 |
 | `ai_guard_daily_report.xml` | 空 |
 | `screen_share` / `voip_record` | 0 行 |
 
-> 结论：**能力存在，但触发面窄、依赖多、当前未启用；一旦启用，录制范围是整屏，而不是只覆盖某个 App。**
+> 视频路径不检查 `RECORD_AUDIO`；当前未启用的决定性条件是 `ai_guard_function_switch=0`、`available=false`、无活跃 `MediaProjection`、无 `clip` 文件。
+>
+> 结论：**能力存在，且视频路径已确认接线（3 秒一段、未命中隔 2 秒再录）；触发面窄、依赖多、当前未启用；一旦启用，录制范围是整屏，而不是只覆盖某个 App。**
 
 ---
 

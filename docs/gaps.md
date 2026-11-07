@@ -65,9 +65,10 @@
 
 ### 10.1 AI 防诈录屏/上传链路未实测
 
-- 现状：代码链路已还原（`p079l1` → `AiGuardService.C(Path)` → `/aiVideo/pcc/detection`），但 `ai_guard_function_switch=0`、`RECORD_AUDIO` 未授权、无活跃 MediaProjection。
-- 缺口：`p079l1/a.java` 在反编译结果中无可见调用点，视频路径是否接线无法仅凭静态分析确认。
-- 补法：在可回滚前提下打开开关并授予 `RECORD_AUDIO`，发起一次微信/QQ 视频通话，观察 `cache/clip_*`、`dumpsys media_projection`、`detection-aigc.engine.miui.com` 流量。
+- 现状：代码链路已还原（`AiGuardService$p.A` → 录 3 秒 → `C(Path)` → `/aiVideo/pcc/detection`），但 `ai_guard_function_switch=0`、无活跃 MediaProjection。
+- 已确认（v1.3.2）：3 秒/2 秒循环在 `AiGuardService$p.A`；调用点已接线。JADX 默认模式因 `JadxOverflowException` 跳过该方法，`--show-bad-code` 可还原。
+- 缺口：运行时行为未实测（实际是否每轮上传、云端响应耗时、命中弹窗、服务生命周期）。
+- 补法：在可回滚前提下打开开关，发起一次微信/QQ 视频通话，观察 `cache/clip_*`、`dumpsys media_projection`、`detection-aigc.engine.miui.com` 流量。
 
 ### 10.2 远程唤醒/触发已评估
 

@@ -1,0 +1,97 @@
+# AiGuardService$p.A — 3 秒录制 / 2 秒间隔循环
+
+- 目标：`com.miui.guardprovider` 2.5.6-20251106.0（versionCode 256，targetSdk 36）
+- APK：`evidence/apk/MIUIGuardProvider.apk`
+- APK SHA-256：`7b5a26b38cf3f3c1967cd8e6ed06d3d1ac0ff45371037c16e7982e9925f510c3`
+- 方法：`com.miui.guardprovider.aiguard.AiGuardService$p.A(Object)`
+- 背景：JADX 默认模式在该方法抛 `JadxOverflowException`，方法体被标记为
+  `Method not decompiled: ... AiGuardService.p.A(java.lang.Object)`。
+
+## 复现命令
+
+```bash
+jadx -d /tmp/gp_p --show-bad-code --comments-level debug \
+  --single-class 'com.miui.guardprovider.aiguard.AiGuardService$p' \
+  evidence/apk/MIUIGuardProvider.apk
+```
+
+## 关键 smali（节选，保持原始寄存器名）
+
+```text
+p(int i6, Continuation eVar) {
+    ...
+    r6 = 3
+    r7 = 2
+}
+
+L69:
+    boolean r14 = V3.N.e(r0)          // Job.isActive
+    if (r14 == 0) goto L100
+    r2.c()                            // MediaRecorder.start()
+    U3.a$a r14 = U3.a.f6193b
+    U3.d r14 = U3.d.SECONDS
+    long r8 = U3.c.o(r6, r14)         // 3 秒
+    ...
+    java.lang.Object r14 = V3.W.b(r8, r13)   // Kotlin delay(3s)
+    if (r14 != r1) goto L8a
+L8a:
+    java.nio.file.Path r14 = r2.d()   // MediaRecorder.stop()，返回 clip 路径
+    if (r14 != 0) goto L91
+    goto L69
+L91:
+    ...                               // withContext(IO) { C(path) }
+Lb2:
+    if (r14 == 0) goto Le1
+    AiGuardService.h(r14, r9)         // 弹警告
+    stopSelf()
+    goto L100
+Le1:
+    U3.d r10 = U3.d.SECONDS
+    long r10 = U3.c.o(r7, r10)        // 2 秒
+    ...
+    java.lang.Object r14 = V3.W.b(r10, r13)  // Kotlin delay(2s)
+    if (r14 != r1) goto L69
+L100:
+    r2.b()                            // MediaRecorder.release()
+```
+
+## 还原后的 Kotlin 结构
+
+```kotlin
+while (scope.isActive) {
+    recorder.c()                 // start
+    delay(3.seconds)             // 固定 3 秒
+    val clip = recorder.d()      // stop，取 cache/clip_*
+    if (clip != null) {
+        val hit = C(clip)        // Base64 → 加密 → /aiVideo/pcc/detection
+        if (hit) {               // checkRes == true
+            u(scene)             // 弹警告
+            stopSelf()
+            break
+        }
+        Files.delete(clip)       // 未命中，删除
+    }
+    delay(2.seconds)             // 固定 2 秒
+}
+recorder.b()                     // release
+```
+
+## 交叉确认
+
+| 符号 | 作用 | 依据 |
+|---|---|---|
+| `V3.N.e(M)` | `Job.isActive` | `N.e()` 取 `InterfaceC0684y0` 后调用 `f()` |
+| `U3.c.o(int, d)` | `n` + `TimeUnit` → Kotlin `Duration` | `d.SECONDS` 枚举 |
+| `V3.W.b(long, Continuation)` | Kotlin `delay` | `W.b()` 内部挂起当前协程 |
+| `p079l1.a.c()` | `MediaRecorder.start()` | `p079l1/a.java:74` |
+| `p079l1.a.d()` | `MediaRecorder.stop()` | `p079l1/a.java:78-103` |
+| `AiGuardService.C(Path)` | Base64 → 加密 → `/aiVideo/pcc/detection` | `AiGuardService.java:1502` |
+| `COMMAND=2` | 视频检测入口 | `AiGuardService.onStartCommand` |
+
+## 边界
+
+- `3` / `2` 为硬编码，不读云端配置。
+- 实际周期 = 3 秒录制 + 上传/等待响应 + 2 秒间隔。
+- 命中（`checkRes=true`）后弹警告并 `stopSelf()`；未命中删除 `clip` 后继续。
+- 服务生命周期由 `detectionServiceLifetimeThresholdInMinutes` 限制，默认 10 分钟。
+- 仅在 `COMMAND=2` 视频路径；`COMMAND=1` 语音路径不使用该循环。
