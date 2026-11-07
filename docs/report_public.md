@@ -304,13 +304,13 @@ b();             // 读日志开关
 
 ## 7. 发现五：AI 通话防诈（`com.miui.guardprovider`）
 
-> 一句话：这不是通用录屏工具。**录屏触发范围仅限微信/QQ 通话**；一旦触发，采集的是**整屏**，屏幕上是任何 App 都会进入画面。当前开关为 0，未启用。
+> 一句话：这不是通用录屏工具。**录屏触发范围覆盖普通电话（未知号码）与微信/QQ 通话**；一旦触发，采集的是**整屏**，屏幕上是任何 App 都会进入画面。当前开关为 0，未启用。
 
 ### 7.0 定位与边界
 
 | 维度 | 范围 |
 |---|---|
-| 触发 App | **仅 `com.tencent.mm`（微信）与 `com.tencent.mobileqq`（QQ）** |
+| 触发范围 | **普通电话（未知号码）+ `com.tencent.mm`（微信）+ `com.tencent.mobileqq`（QQ）** |
 | 触发场景 | 语音/视频通话界面在前台（特定 Activity） |
 | 采集范围 | **整屏镜像**（`AUTO_MIRROR` + 全屏尺寸） |
 | 产物 | `clip.mp4` → Base64 → 上传 `detection-aigc.engine.miui.com` |
@@ -339,6 +339,7 @@ b();             // 读日志开关
 ```
 SecurityCenter AiGuardSceneService
   ├─ 监听 miui.media.AUDIO_VOIP_RECORD_STATE_CHANGED_ACTION
+  ├─ TelephonyManager 通话状态（普通电话）
   ├─ 监听前台 Activity（IProcessObserver）
   │    ├─ com.tencent.mm.plugin.voip.ui.VideoActivity   → 微信
   │    └─ com.tencent.av.ui.AVActivity                  → QQ
@@ -347,7 +348,8 @@ SecurityCenter AiGuardSceneService
         COMMAND=2  VIDEO_SCAM_SCENE=<scene>  CAPABILITIES=<bits>
 ```
 
-- 包名白名单：**只有** `com.tencent.mm`、`com.tencent.mobileqq`
+- 微信/QQ 路径：`com.tencent.mm`、`com.tencent.mobileqq`，匹配对应 Activity
+- **普通电话路径**：`TelephonyManager` 通话状态；`CALL_STATE=2` 且号码不在黄页名单时，启动 `PHONE_SCAM_SCENE=2`
 - 场景值：QQ `{3,1}`，微信 `{4,2}`
 - `CAPABILITIES & 1` → 语音检测；`CAPABILITIES & 2` 且 `isUsingCamera` → 视频检测
 - `AiGuardService.onStartCommand`：
@@ -359,13 +361,13 @@ SecurityCenter AiGuardSceneService
 
 | 功能 | 触发范围 | 采集范围 | 存什么 |
 |---|---|---|---|
-| AI 防诈录屏 | **仅微信/QQ 通话** | **整屏镜像** | `clip.mp4` 上传 |
+| AI 防诈录屏 | **普通电话 + 微信/QQ** | **整屏镜像** | `clip.mp4` 上传 |
 | 截屏记录 | 任何 App（用户截屏） | 仅事件 | 毫秒时间戳 |
 | 屏幕共享记录 | 任何 App（除忽略名单） | 仅包名 | 包名 + 起止 + 时长 |
 
 ### 7.4 局限性
 
-1. **触发面很窄**：只覆盖微信、QQ；Telegram、WhatsApp、Signal、钉钉、飞书等都不在列表。
+1. **触发面有限**：覆盖普通电话（未知号码）与微信/QQ；Telegram、WhatsApp、Signal、钉钉、飞书等不在列表。
 2. **依赖特定 Activity**：微信 `com.tencent.mm.plugin.voip.ui.VideoActivity`、QQ `com.tencent.av.ui.AVActivity`；版本更新、小窗、分屏、悬浮窗都可能导致匹配失败。
 3. **视频依赖 `isUsingCamera`**：纯语音通话只走音频检测，不触发视频录制。
 4. **依赖 `RECORD_AUDIO`**：权限被撤销时，代码直接打印 "permissions revoked" 并跳过。
@@ -390,7 +392,7 @@ SecurityCenter AiGuardSceneService
 | `ai_guard_daily_report.xml` | 空 |
 | `screen_share` / `voip_record` | 0 行 |
 
-> 结论：**能力存在，但触发面窄、依赖多、当前未启用；一旦启用，录制范围是整屏，而不是仅微信/QQ。**
+> 结论：**能力存在，但触发面窄、依赖多、当前未启用；一旦启用，录制范围是整屏，而不是只覆盖某个 App。**
 
 ---
 

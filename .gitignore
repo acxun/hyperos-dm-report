@@ -15,3 +15,6 @@ evidence/decompiled/full/
 
 # 例外：数据库仅 schema/counts 入库；原始抓包一律不入库
 !evidence/databases/*.csv
+
+# 视频成品与中间产物仅本地保留
+video/
