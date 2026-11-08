@@ -31,7 +31,7 @@
 - 两套 DM 的待传队列、预装清单、基站/流量数据均已在本地取到
 - 远程无法实时触发：两套 DM 均无 push/网络监听；触发源只有闹钟、系统广播、本地导出组件、运营商短信/STK（间接）
 - 采集与上报频率不同：位置/基站每 **30 分钟**写入本地；信号历史默认 **12 小时**、App 清单 **24 小时**上报一次
-- 包管理器：安装成功与取消均抓到 `/avl/upload`（`installCnt=1/0`）；per-app 云控 `/v4/game/interceptcheck/safemode` 与 GuardProvider `/risk/scan` 均已实测；风险样本 Avl 命中 `Risk/Android.R_Cont.Porn`，安装器显示“发现风险”/“单次安装授权”，取消后仍上传元数据，完成单次安装授权后安装成功（`installCnt=1`），本地命中未进入威胁报告队列
+- 包管理器：安装成功与取消均抓到 `/avl/upload`（`installCnt=1/0`）；per-app 云控 `/v4/game/interceptcheck/safemode` 与 GuardProvider `/risk/scan` 均已实测；风险样本 Avl 命中 `Risk/Android.R_Cont.Porn`，安装器显示“发现风险”/“单次安装授权”，取消后仍上传元数据，完成单次安装授权后安装成功（`installCnt=1`），本地命中未进入威胁报告队列；`adb install`/`pm install` 成功安装但未进入安装器 UI，未触发 `/avl/upload`
 
 ### 风险与建议
 
@@ -51,7 +51,7 @@
 
 ### 证据
 
-- 公开报告：`docs/report_public.md`（v1.4.1）
+- 公开报告：`docs/report_public.md`（v1.4.2）
 - 证据清单：`evidence/MANIFEST.md`（SHA-256）
 - 抓包：仅本地 `private/pcap/`（不入库）；反编译关键类：`evidence/decompiled/key/`
 - 包管理器脱敏日志：`evidence/redacted/package_installer_upload.log`

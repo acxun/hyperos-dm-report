@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.4.1
+- 版本：v1.4.2
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -659,7 +659,7 @@ AndroidManifest.xml
 | 关联组件 | `com.miui.guardprovider` 3.1.4-20260902.0（病毒扫描/云查） |
 | 测试入口 | 文件管理器 `ACTION_VIEW` → `NewInstallerPrepareActivity` |
 
-边界：本节只覆盖 HyperOS 安装器 UI（打开 APK、点安装、点取消）。`adb install` / `pm install` 走 PackageInstaller 会话，是否触发同样的上报未在本节验证，两者行为可能不同。
+边界：本节主要覆盖 HyperOS 安装器 UI（打开 APK、点安装、点取消）。已补测 `adb install` 与 `pm install`：两者都能成功安装，但不进入 MIUI 安装器准备界面，未触发 `/avl/upload`（`adb install` 仅启动了安装器的包变更处理进程；`pm install` 未启动安装器进程）。因此下述 UI 侧结论不适用于 shell 安装路径。
 
 ### 9.2 三个时点的网络行为
 
@@ -911,8 +911,9 @@ D/MIUIPI_NetUtil: request result : {"data":"succ","code":200,"msg":"succ"}
 - 风险样本取消后 `/avl/upload` 仍包含完整应用元数据与 25 项权限；
 - 本地 Avl 一级命中未生成 `ReportStore` 待上报文件，未抓到 `/virus/localResult/report`；
 - `cToken`/`tInfo` 未触发（云端未下发 `cFlag/tFlag`）；
-- `adb install` / `pm install` 路径未覆盖；
+- `adb install` / `pm install`：均安装成功；未出现 `NewInstallerPrepareActivity`/`InstallStart`，未抓到 `/avl/upload`；`pm install` 未启动安装器进程；
 - 单次安装授权的具体菜单和验证方式由 HyperOS 版本决定；本次在真机上完成，未覆盖小米账号密码/人脸等其他验证方式。
+- 其他 session/企业安装路径未覆盖。
 
 结论分级：
 
@@ -980,7 +981,7 @@ com/miui/guardprovider/sdk/android/work/ReportWorker.java
 
 日志与抓包：
 
-- 请求：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/avl/upload`、`/risk/scan`；
+- 请求：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/avl/upload`、`/risk/scan`；边界补测：`adb install` / `pm install` 未触发 `/avl/upload`；
 - `logcat` 标签：`MIUIPI_NetUtil`、`MIUIPI_InstallDataReporter`、`MIUIPI_NewInstallerPrepareActivity`、`MIUIPI_NewVirusScanner`、`VirusScanManagerService`、`CloudScanner`、`RealScanner`、`MIUIPI_InstallProgress`；
 - 脱敏日志：`evidence/redacted/package_installer_upload.log`；
 - 原始 pcap 仅在本地 `private/pcap/`，不入库（干净样本 `package_installer_install6.pcap` / `package_installer_baseline7.pcap`，风险样本取消 `package_installer_risk.pcap`，风险样本安装成功 `package_installer_risk_install.pcap`）；
@@ -1143,4 +1144,4 @@ sha256sum -c evidence/SHA256SUMS
 - 取证过程未修改业务逻辑；测试用配置已恢复原值。
 - 本文已移除设备标识、SIM 标识、位置、WiFi、App 清单等个人隐私信息，仅保留技术事实。
 - 文中所述组件均为系统预装、Xiaomi 平台签名，不代表其具有恶意意图；报告关注的是采集范围、加密方式与用户可控性。
-- 包管理器部分基于单台设备、多次安装/取消测试；未使用真实诈骗样本，但使用了一个被 Avl 标记的色情风险样本；用户在真机上完成“单次安装授权”后安装成功，`/avl/upload` 为 `installCnt=1`；`/virus/localResult/report` 未触发；`cToken/tInfo` 未触发；`adb install` / `pm install` 路径未覆盖。
+- 包管理器部分基于单台设备、多次安装/取消测试；未使用真实诈骗样本，但使用了一个被 Avl 标记的色情风险样本；用户在真机上完成“单次安装授权”后安装成功，`/avl/upload` 为 `installCnt=1`；`/virus/localResult/report` 未触发；`cToken/tInfo` 未触发；已补测 `adb install`/`pm install` 绕过安装器 UI、未触发 `/avl/upload`；其他 session/企业安装路径未覆盖。

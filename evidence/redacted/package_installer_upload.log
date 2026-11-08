@@ -222,3 +222,10 @@ adb pull /data/local/tmp/install.pcap
 ```
 
 > 测试 APK 已卸载，调试开关已删除；原始日志与 pcap 仅本地保留。
+
+## 9. 边界补测：`adb install` / `pm install`
+
+- `adb install -r pkgtest2-v2.apk`：安装成功（incremental install），`lastUpdateTime` 更新；MIUI 安装器进程启动，但未出现 `NewInstallerPrepareActivity` / `InstallStart`，未抓到 `/avl/upload`。
+- `adb shell pm install -r /data/local/tmp/pkgtest2.apk`：`Success`；`pidof com.miui.packageinstaller` 为空，无 `MIUIPI_*` / `/avl/upload` 日志。
+- 结论：shell 安装路径绕过 MIUI 安装器 UI，未触发安装器上报；`/avl/upload` 只覆盖 UI 路径。
+- 测试包 `com.example.pkgtest` 已卸载；调试开关已删除。

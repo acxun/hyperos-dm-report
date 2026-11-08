@@ -77,8 +77,8 @@
 
 ### 10.3 包管理器上报未做云端威胁命中验证
 
-- 现状：已实测安装/取消都会触发 `/avl/upload`；打开安装界面会触发 `/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode` 与 `/info/layout/v2`；GuardProvider `/risk/scan` 与 `virus-engine` DNS/SNI 已实测。另用一个被本机 Avl 标记的色情风险样本实测：安装器显示“发现风险”，要求“单次安装授权”；在风险提示页取消后仍上传完整安装元数据（`installCnt=0`）；用户完成单次安装授权后安装成功（`installCnt=1`，`lastUpdateTime` 更新）；本地 Avl 一级命中未生成 `ReportStore` 待上报文件，未抓到 `/virus/localResult/report`。
-- 未覆盖：云端威胁命中（非本地 Avl）后的 `/virus/localResult/report`；`cToken/tInfo` 未触发；`adb install` / `pm install` 路径未测；单次安装授权与安装成功已实测；小米账号密码/人脸等其他验证方式未覆盖。
+- 现状：已实测安装/取消都会触发 `/avl/upload`；打开安装界面会触发 `/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode` 与 `/info/layout/v2`；GuardProvider `/risk/scan` 与 `virus-engine` DNS/SNI 已实测。另用一个被本机 Avl 标记的色情风险样本实测：安装器显示“发现风险”，要求“单次安装授权”；在风险提示页取消后仍上传完整安装元数据（`installCnt=0`）；用户完成单次安装授权后安装成功（`installCnt=1`，`lastUpdateTime` 更新）；本地 Avl 一级命中未生成 `ReportStore` 待上报文件，未抓到 `/virus/localResult/report`；`adb install`/`pm install` 成功安装但未进入安装器 UI，未触发 `/avl/upload`。
+- 未覆盖：云端威胁命中（非本地 Avl）后的 `/virus/localResult/report`；`cToken/tInfo` 未触发；`adb install` / `pm install` 已测，绕过 UI 上报；其他 session/企业安装路径未覆盖；单次安装授权与安装成功已实测；小米账号密码/人脸等其他验证方式未覆盖。
 - 补法：在隔离环境用云端已知命中的样本（或可控响应）验证威胁报告；MITM 或 Frida 观察 `cInfo.cFlag/tFlag` 响应；在测试机设置临时锁屏/指纹后完成一次风险应用安装；单独验证 `pm install` 是否绕过安装器 UI 上报。
 
 ---
