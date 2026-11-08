@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.4.9
+- 版本：v2
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -20,17 +20,17 @@
 | 本地反诈库 | `com.miui.securitycenter` | Xiaomi | 未发现上传 | 本地写入 |
 | AI 通话防诈 | `com.miui.guardprovider` | Xiaomi | `detection-aigc.engine.miui.com` 等 | 开关关闭，未启用 |
 | 系统包管理器 | `com.miui.packageinstaller` | Xiaomi | `api.installer.xiaomi.com` / `virus-engine.sec.miui.com` | 活跃，安装/取消均上报 |
-| 电信自动注册 | `com.xiaomi.registration` | 中国电信方向（Xiaomi 平台签名预装） | `zzhc.vnet.cn:443`（HTTPS）+ `typdm.tydevice.com:80`（HTTP） | 活跃，已注册 |
+| 电信自动注册 | `com.xiaomi.registration` | 中国电信方向（Xiaomi 平台签名预装） | `zzhc.vnet.cn:443`（HTTPS）+ `typdm.tydevice.com:80`（HTTP） | 活跃；偏好项表明曾注册，未捕获该次请求 |
 
 主要结论：
 
-1. `SystemHelper` **每 30 分钟采集**位置、基站、WiFi 并写入本地队列；**实际上报频率不是 30 分钟**：信号历史默认 **12 小时**一次、App 清单 **24 小时**一次，设备信息由开机/换卡/联网事件触发。上报内容包含设备标识、SIM 标识（部分打码）、经纬度（最多 6 位小数）、行政区、基站参数、WiFi 信息、存储信息与 App 使用清单。
-2. 上报链路为 **明文 HTTP + AES-128-ECB**，且 **AES key = MD5(明文)**；`sign` 参数是 **RSA(1024 位公钥, MD5)**。由于 key 由明文派生，取得本地明文即可还原网络密文（已实测）。
-3. `DMRegService` 采集 App 清单、完整 SIM 标识、基站/WiFi、按小时流量（含路由器 MAC 与公网 IP）、蓝牙/WiFi 列表，上报开关由云端配置控制。
-4. 两套 DM 均存在 **无权限保护的导出组件**，本机任意应用可重定向上报地址或触发上报。
+1. `SystemHelper` **默认每 30 分钟调度**采集位置、基站、WiFi 并写入本地队列；**实际上报频率不是 30 分钟**：信号历史默认 **12 小时**一次、App 清单 **24 小时**一次，设备信息由开机/换卡/联网事件触发。实测 R 样本 100 条跨度 55.57 小时，99 个相邻间隔中 83 个恰为 30 分钟，最短 9.4 分钟、最长 300.2 分钟，说明存在中断/额外采样。上报内容包含设备标识、SIM 标识（部分打码）、经纬度（最多 6 位小数）、行政区、基站参数、WiFi 信息、存储信息与 App 使用清单。
+2. 上报链路为 **明文 HTTP + AES-128-ECB**，且 **AES key = MD5(明文)**；`sign` 参数是 **RSA(1024 位公钥, MD5)**。对**已有匹配本地明文**的样本可还原网络密文（已实测）；这不能推广为可解密任意未知流量。
+3. `DMRegService` 的表结构与代码支持采集 App 清单、SIM 标识、基站/WiFi、按小时流量（含路由器 MAC 与公网 IP）、蓝牙/WiFi 列表，上报开关由云端配置控制；但本次 HTTPS 未解密，字段级上报未确认。公开快照中 `app_info_*` 447 行，`table_name_network` / `table_of_time_related_traffic` / `table_name_wifi_list` / `table_name_bluetooth` / `table_name_battery_charge` 均为 0 行，不能据此证明这些字段本次已采集或已发送。
+4. 两套 DM 的导出组件在静态检查中未见调用方校验，存在**潜在未授权调用面**；普通第三方应用的实际可达性与重定向效果尚未用最小 PoC 验证。
 5. 截屏时间、安装记录、通话记录仅写入本地反诈库，**未发现上传路径**；AI 通话防诈当前关闭。
-6. `com.xiaomi.registration` 是预装的电信终端注册组件，采集 MEID/IMEI/IMSI/ICCID/MAC/Cell ID 等标识并上报；本机在中国移动卡 + WiFi 条件下已完成注册，且存在无权限保护的导出组件。
-7. `com.miui.packageinstaller` 在打开安装界面时即向 `api.installer.xiaomi.com` 发送包名/设备信息；**安装与取消都会**向 `/avl/upload` 上传安装元数据；云端还可按 `cInfo` 要求上传 APK 加密片段与 TLSH 模糊哈希。GuardProvider 云查已实测（`/risk/scan`）；实测一个被 Avl 标记的风险应用时，安装器显示“发现风险”并要求“单次安装授权”，取消安装仍上传完整安装元数据；本地命中未触发 `/virus/localResult/report`，云端命中后的威胁报告仍为代码路径。
+6. `com.xiaomi.registration` 是预装的电信终端注册组件，采集 MEID/IMEI/IMSI/ICCID/MAC/Cell ID 等标识并上报；偏好项与代码表明曾成功注册，基于当前 SIM 与分支条件推断可在移动卡 + WiFi 下完成，未捕获该次请求/响应；导出组件未见调用方校验（静态）。
+7. `com.miui.packageinstaller` 打开安装界面即向 `api.installer.xiaomi.com` 发送包名/设备信息；**安装与取消都会**向 `/avl/upload` 上传安装元数据；APK 加密片段/TLSH 是 `cInfo` 控制的代码能力。GuardProvider 云查有服务日志和 DNS/SNI 证据，`/risk/scan` 字段列表为代码级。实测 Avl 风险应用显示“发现风险”并要求单次安装授权，取消仍上传元数据。本次检查时威胁报告目录为空，窗口内未观察到 `/virus/localResult/report`，不证明从未入队；云端命中后的报告仍为代码路径。
 
 ---
 
@@ -79,7 +79,7 @@
 
 ### 3.2 采集内容
 
-**信号/位置（30 分钟一条，本地最多 100 条，约 50 小时）**
+**信号/位置（默认调度 30 分钟；本地最多 100 条）**
 
 ```
 Time / IMEI / ICCID / IMSI（部分打码）/ MNC / NetworkType
@@ -151,45 +151,45 @@ return (isWifi && isChinaMnc) || (!isRoaming && isUnicom);
 | DMReg 心跳 | 24 小时 | `heartbeat_interval = 86400000` |
 | DMReg App 采集 | 7 天 | `app_heartbeat_interval = 604800000` |
 
-> **30 分钟只是“采集到本地”，不是“每 30 分钟上报”。**
-> 这也解释了为什么抓到的 R 包一次包含 100 条记录，而不是 1 条。
+> **30 分钟是默认调度，不是严格的实测间隔；也只是“采集到本地”，不是“每 30 分钟上报”。**
+> R 样本 100 条跨度 55.57 小时，83/99 个间隔恰为 30 分钟，最短 9.4 分钟、最长 300.2 分钟。
 
 ### 3.6 抓包/解密结果（脱敏）
 
 | 包 | 密文字节 | 响应 | 结果 |
 |---|---|---|---|
-| B（设备信息） | 1,024 | 429 | 解密成功 |
+| B（设备信息） | 1,024 | 429 | 历史记录为解密成功；本轮未独立复核 |
 | R（信号历史） | 68,784 | 429 | **解密成功，100 条记录** |
-| A（App 清单） | 40,464 | 200 | 成功发出，本地无明文（不可从包解密） |
-| A（App 清单） | 40,464 | **429** | **解密成功，169 个 App** |
+| A（App 清单） | 40,464 | 200 | 本次未取得匹配明文，未完成恢复；不能据此证明协议不可解密 |
+| A（App 清单） | 40,464 | **429** | 旧 ID59 明文 169 项；当前 A 抓包（ID72）未找到匹配明文，未完成逐字节闭环 |
 
-> A 包的 200 样本无法解密（成功不落库）；通过连续触发制造限流（429）后，同一明文会写入本地队列，即可完成“密文 → 明文”闭环。
+> A 的 200 样本本次没有取得匹配明文；429 的旧 ID59 有 169 项，但当前 A 抓包未找到对应明文，不能替代正文声称的 ID72 闭环。
 
 R 包解密后的统计（不含具体值）：
 
 - 记录数：100
-- 覆盖约 2.3 天，30 分钟一条
+- 跨度 55.57 小时；99 个相邻间隔中 83 个恰为 30 分钟，最短 9.4 分钟、最长 300.2 分钟
 - 基站：4 个 CID、3 个 PCI
 - WiFi：2 个 SSID
 - 经纬度：集中在约 100m × 20m 范围内
 - 行政区：单一城区
 
-A 包解密后的统计（不含具体值）：
+A 旧 ID59 队列明文的统计（不含具体值；不代表当前抓包已解密）：
 
 - 记录数：169 个 App
 - 字段：应用名、包名、使用时长、启动次数、移动/WiFi 收发
 - 过滤：排除 `com.android*`
 - 同一时段连续请求中，服务器返回 `200` 与 `429` 混合
 
-### 3.7 无权限保护的导出组件
+### 3.7 导出组件：潜在未授权调用面（静态）
 
 | 类型 | 组件 | 风险 |
 |---|---|---|
 | service | `.service.RegisterHelperService` | AIDL 可改 serverAddress、改间隔、删配置、开关日志 |
 | activity | `.Activity.TestActivity` | 打开即显示完整设备信息 JSON |
-| receiver | `.control.OnBootReceiver` | 任意应用可触发上报 |
-| receiver | `.control.SIMStateReceiver` | 任意应用可触发 |
-| receiver | `.control.ConnectStateReceiver` | 任意应用可触发 |
+| receiver | `.control.OnBootReceiver` | 导出；`BOOT_COMPLETED` 是系统受保护广播，普通应用能否触发待验证 |
+| receiver | `.control.SIMStateReceiver` | 导出；实际可达性待验证 |
+| receiver | `.control.ConnectStateReceiver` | 导出；实际可达性待验证 |
 
 `IRegisterHelperService` 的方法：
 
@@ -201,7 +201,7 @@ d(boolean on);   // 开关日志
 b();             // 读日志开关
 ```
 
-实现中没有 `getCallingPackage()` 或权限校验，任意本机应用均可绑定调用。
+实现中没有 `getCallingPackage()` 或权限校验，属于静态风险；但绑定服务、启动服务、发送自定义广播与发送受保护广播需要分别验证。`OnBootReceiver` 检查的 `BOOT_COMPLETED` 是系统受保护广播，root/shell 触发不能代替普通应用验证。最小 PoC 尚未完成。
 
 ---
 
@@ -231,7 +231,9 @@ b();             // 读日志开关
 | `table_name_wifi_list` / `table_name_bluetooth` | WiFi/蓝牙扫描列表 |
 | `table_app_collect_list` | 采集窗口与 SIM 标识 |
 
-预装清单：`key_pre_install_info` 存有约 393 个预装 App 的元数据（名称、包名、版本、安装时间、签名 MD5、flags），尚未上报。
+> 说明：上表是表结构/代码支持的字段，不等于本次已采集或已发送。公开计数中 `app_info_*` 为 447 行，network/traffic/WiFi/Bluetooth/battery 表为 0 行；HTTPS 内容未解密。
+
+预装清单：`key_pre_install_info` 存有约 393 个预装 App 的元数据（名称、包名、版本、安装时间、签名 MD5、flags）；对应上报开关为 N，未确认本次实际上传，也不能据此判断历史上从未上传。
 
 ### 4.3 云端开关
 
@@ -261,16 +263,16 @@ b();             // 读日志开关
 ### 4.5 运行特征
 
 - 未唤醒时静默（进程被系统回收、无闹钟）
-- 收到 `cn.richinfo.dmyk.action.HEARTBEAT` 后立即启动，建立 2 条 TLS 连接，上传约 2.3 KB，收到约 0.3 KB
+- 收到 `cn.richinfo.dmyk.action.HEARTBEAT` 后立即启动，建立 2 条 TLS 连接，上传约 2.3 KB，收到约 0.3 KB；这里只有 TLS 元数据/连接状态，内容未解密
 - `last_success_heartbeat_time` 随之更新，App 采集窗口同步延长
 
-### 4.6 无权限保护的导出组件
+### 4.6 导出组件：潜在未授权调用面（静态）
 
 | 类型 | 组件 | 风险 |
 |---|---|---|
-| service | `cn.richinfo.dm.service.DMService` | 任意应用可 startService 触发 DM 流程 |
-| receiver | `com.richinfo.mthttp.MTStaticBReceiver` | 任意应用可发送 `alarm_heart`/`alarm_retry` 触发心跳 |
-| receiver | `.BootCompleteReceiver` | 任意应用可触发 |
+| service | `cn.richinfo.dm.service.DMService` | 导出；普通应用 startService 的实际可达性待验证 |
+| receiver | `com.richinfo.mthttp.MTStaticBReceiver` | 导出；发送 `alarm_heart`/`alarm_retry` 的实际效果待验证 |
+| receiver | `.BootCompleteReceiver` | 导出；受保护广播/普通应用可达性待验证 |
 
 ---
 
@@ -311,17 +313,17 @@ b();             // 读日志开关
 
 ## 7. 发现五：AI 通话防诈（`com.miui.guardprovider`）
 
-> 一句话：这不是通用录屏工具。**录屏触发范围覆盖普通电话（未知号码）与微信/QQ 通话**；一旦触发，采集的是**整屏**，屏幕上是任何 App 都会进入画面。视频检测路径为**每轮录 3 秒 → 上传 → 未命中隔 2 秒再录**。当前开关为 0，未启用。
+> 一句话：这不是通用录屏工具。**普通未知号码电话只触发语音检测；视频录屏入口是微信/QQ 的特定通话 Activity，并受能力位与摄像头使用状态约束。**视频路径触发后申请整屏镜像，但受 `FLAG_SECURE`/受保护图层限制，敏感界面的实际可录范围未实测。视频检测路径为**每轮录 3 秒 → 上传 → 未命中隔 2 秒再录**。当前开关为 0，未启用。
 
 ### 7.0 定位与边界
 
 | 维度 | 范围 |
 |---|---|
-| 触发范围 | **普通电话（未知号码）+ `com.tencent.mm`（微信）+ `com.tencent.mobileqq`（QQ）** |
-| 触发场景 | 语音/视频通话界面在前台（特定 Activity） |
-| 采集范围 | **整屏镜像**（`AUTO_MIRROR` + 全屏尺寸） |
+| 触发范围 | 语音检测：普通未知号码电话；视频录屏：`com.tencent.mm`（微信）+ `com.tencent.mobileqq`（QQ）的特定通话 Activity |
+| 触发场景 | 语音：电话通话状态；视频：微信/QQ 视频通话 Activity 在前台，且能力位/`isUsingCamera` 满足 |
+| 采集范围 | **整屏镜像**（`AUTO_MIRROR` + 全屏尺寸）；未设置 `FLAG_SECURE`，安全窗口/受保护图层通常不会被捕获，实际范围未实测 |
 | 产物 | 每段 3 秒的 `clip.mp4` → Base64 → 上传 `detection-aigc.engine.miui.com` |
-| 分析版本 | 预装 `2.5.6-20251106.0`；当前设备已更新到 `3.1.4-20260902.0`，3 秒循环与上传链路在 3.1.4 中仍存在 |
+| 分析版本 | 预装 `2.5.6-20251106.0`；当前设备已更新到 `3.1.4-20260902.0`，3 秒循环与上传链路在 3.1.4 中仍存在。3.1.4 APK SHA-256：`eff2c614d054263068e931f859f2e9fb4c66e31f960d815ab507abbdff15bb5d`（本地 `private/apk/`）；关键类 `re3/x7/k43/u23` 已入库 |
 | 当前状态 | 开关 0、`RECORD_AUDIO` 未授权、无活跃 projection、无 clip 文件 |
 
 ### 7.1 录屏与上传链路
@@ -329,7 +331,7 @@ b();             // 读日志开关
 - `p079l1/d.java`：反射 `MediaProjectionManager.mService` → 直接 `createProjection`，绕过系统授权对话框
 - `p079l1/a.java`：
   - `createVirtualDisplay("ScreenRecorder", 整屏宽, 整屏高, dpi, 16, ...)`
-  - `16` = `VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR`
+  - `16` = `VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR`；未设置 `VIRTUAL_DISPLAY_FLAG_SECURE`（4），因此安全窗口内容通常不会被捕获
   - `MediaRecorder` 720×1280 / 24fps / 1Mbps；每次录制 3 秒（见 §7.1.1）
   - 临时文件 `cache/clip_*`
 - `AiGuardService.C(Path)`：
@@ -345,19 +347,19 @@ b();             // 读日志开关
 `AiGuardService$p.A`（`COMMAND=2` 视频检测协程）是一个 `while (scope.isActive)` 循环：
 
 ```kotlin
+// 由反编译控制流还原的伪代码，不是原始 Kotlin 源码
 while (scope.isActive) {
     recorder.c()                 // MediaRecorder.start()
     delay(3.seconds)             // U3.c.o(3, SECONDS)
     val clip = recorder.d()      // MediaRecorder.stop()，返回 cache/clip_*
-    if (clip != null) {
-        val hit = C(clip)        // Base64 → 加密 → POST /aiVideo/pcc/detection
-        if (hit) {               // checkRes == true
-            u(scene)             // 弹警告
-            stopSelf()
-            break
-        }
-        Files.delete(clip)       // 未命中，删除
+    if (clip == null) continue   // 空 clip 直接重试，不进入 2 秒等待
+    val hit = C(clip)            // Base64 → 加密 → POST /aiVideo/pcc/detection
+    if (hit) {                   // checkRes == true
+        u(scene)                 // 弹警告
+        stopSelf()
+        break
     }
+    Files.delete(clip)           // 未命中，删除
     delay(2.seconds)             // U3.c.o(2, SECONDS)
 }
 recorder.b()                     // MediaRecorder.release()
@@ -369,12 +371,12 @@ recorder.b()                     // MediaRecorder.release()
 - 若录制返回空（例如 `stop()` 失败），直接重试，不进入 2 秒等待。
 - 单次服务生命周期由云端配置 `detectionServiceLifetimeThresholdInMinutes` 限制，默认 10 分钟；通话结束或服务停止时协程取消。
 - 该循环只在 `COMMAND=2`（视频检测）路径；`COMMAND=1`（语音）走 ASR 文本检测，不使用这段录屏循环。
-- `2.5.6-20251106.0` 与当前 `3.1.4-20260902.0` 均确认存在该循环；3.1.4 的对应方法为 `defpackage.x7.o`，JADX 同样报 `JadxOverflowException`，用 `--show-bad-code` 可还原。
+- `2.5.6-20251106.0` 与当前 `3.1.4-20260902.0` 的静态控制流均支持该循环；3.1.4 对应 `defpackage.x7.o`。默认反编译失败；本轮用 `--show-bad-code --comments-level debug` 取得指令级伪代码，工具仍因 `RegionMakerVisitor` 的 `StackOverflowError` 返回 3，不是成功恢复的结构化 Java。带 APK 哈希/命令的转储节选见 `evidence/decompiled/key/MIUIGuardProvider/defpackage/x7_o.debug.txt`，原 `x7.java` 占位体保留。该证据不代表已实测录屏上传。
 - 3.1.4 中对应类：`defpackage.re3`（录制）、`defpackage.x7`（循环）、`defpackage.k43`（检测接口）、`defpackage.u23`（投屏）。
 
 > 取证说明：JADX 默认模式在 `AiGuardService$p.A` 抛 `JadxOverflowException`，方法体被标记为 “not decompiled”。改用 `jadx --show-bad-code --comments-level debug` 重反编译后取得上述 smali 伪代码；`U3.c.o(n, SECONDS)` 与 `V3.W.b(...)`（Kotlin `delay`）已交叉确认。此前“录制类无可见调用点”的表述据此撤回。
 
-因为 `AUTO_MIRROR` + 整屏尺寸，**录制范围是整屏，不是“只录微信”**；录制期间切到任何 App 都会被录进去。
+因为 `AUTO_MIRROR` + 整屏尺寸，视频路径申请的是整屏镜像，不是“只录微信”；但未设置 `FLAG_SECURE`，银行/密码等安全窗口与受保护图层的实际可录范围未实测，不能断言“任何界面必然被录入”。
 
 ### 7.2 触发链
 
@@ -391,7 +393,7 @@ SecurityCenter AiGuardSceneService
 ```
 
 - 微信/QQ 路径：`com.tencent.mm`、`com.tencent.mobileqq`，匹配对应 Activity
-- **普通电话路径**：`TelephonyManager` 通话状态；`CALL_STATE=2` 且号码**不在联系人、也不在黄页**时，启动 `PHONE_SCAM_SCENE=2`
+- **普通电话路径**：`TelephonyManager` 通话状态；`CALL_STATE=2` 且号码**不在联系人、也不在黄页**时，启动 `PHONE_SCAM_SCENE=2`，走 `COMMAND=1` 语音检测；**不进入这段录屏循环**
 - 场景值：QQ `{3,1}`，微信 `{4,2}`
 - `CAPABILITIES & 1` → 语音检测；`CAPABILITIES & 2` 且 `isUsingCamera` → 视频检测
 - `AiGuardService.onStartCommand`：
@@ -403,20 +405,20 @@ SecurityCenter AiGuardSceneService
 
 | 功能 | 触发范围 | 采集范围 | 存什么 |
 |---|---|---|---|
-| AI 防诈录屏 | **普通电话 + 微信/QQ** | **整屏镜像** | `clip.mp4` 上传 |
+| AI 防诈录屏 | **微信/QQ 视频通话**（普通电话只走语音） | **整屏可捕获画面**（受 `FLAG_SECURE` 限制） | `clip.mp4` 上传 |
 | 截屏记录 | 任何 App（用户截屏） | 仅事件 | 毫秒时间戳 |
 | 屏幕共享记录 | 任何 App（除忽略名单） | 仅包名 | 包名 + 起止 + 时长 |
 
 ### 7.4 局限性
 
-1. **触发面有限**：覆盖普通电话（未知号码）与微信/QQ；Telegram、WhatsApp、Signal、钉钉、飞书等不在列表。
+1. **视频触发面有限**：录屏入口是微信/QQ 的特定通话 Activity；普通未知号码电话只触发语音检测；Telegram、WhatsApp、Signal、钉钉、飞书等不在列表。
 2. **依赖特定 Activity**：微信 `com.tencent.mm.plugin.voip.ui.VideoActivity`、QQ `com.tencent.av.ui.AVActivity`；版本更新、小窗、分屏、悬浮窗都可能导致匹配失败。
 3. **视频依赖 `isUsingCamera`**：纯语音通话只走音频检测，不触发视频录制。
 4. **`RECORD_AUDIO` 只约束语音路径**：`COMMAND=1` 在权限被撤销时打印 "permissions revoked" 并跳过；`COMMAND=2` 视频路径不检查该运行时权限，依赖 `MediaProjection` 与 `CAPTURE_VIDEO_OUTPUT`。
 5. **依赖 `CAPABILITIES` 位**：bit1 语音、bit2 视频，由云端配置下发；位不满足就不启动。
 6. **依赖云端开关**：`ai_guard_function_available` 与 `ai_guard_function_switch` 任一不满足都不会启动。
 7. **3 秒/2 秒是硬编码节奏**：每轮固定录 3 秒，未命中后固定等 2 秒；上传与云端响应时间会拉长实际周期。视频路径已确认接线，调用点为 `AiGuardService$p.A`（见 §7.1.1）。
-8. **全屏镜像的副作用**：一旦开始录，切到银行、密码、聊天等任何界面都会被录进 `clip.mp4`；不是“只录微信/QQ”。
+8. **全屏镜像的边界**：视频路径申请整屏镜像，可能采集切换后其他应用的可捕获画面；但受 `FLAG_SECURE`、受保护图层与系统实现限制，银行/密码等敏感界面的实际可录范围未验证。
 9. **只在通话期间**：不是 7×24 录屏；通话结束即停止。
 10. **自身录屏不进 `screen_share`**：`com.miui.guardprovider` 在忽略名单里，安全中心不会记录它自己的录屏。
 11. **音频冲突/过热**：代码有音频冲突时停止的日志；过热中断未在代码中确认。
@@ -438,13 +440,13 @@ SecurityCenter AiGuardSceneService
 >
 > 视频路径不检查 `RECORD_AUDIO`；当前未启用的决定性条件是 `ai_guard_function_switch=0`、`available=false`、无活跃 `MediaProjection`、无 `clip` 文件。
 >
-> 结论：**能力存在，且视频路径已确认接线（3 秒一段、未命中隔 2 秒再录）；触发面窄、依赖多、当前未启用；一旦启用，录制范围是整屏，而不是只覆盖某个 App。**
+> 结论：**能力存在，且视频路径已确认接线（3 秒一段、未命中隔 2 秒再录）；触发面窄、依赖多、当前未启用；视频路径申请整屏镜像，但受 `FLAG_SECURE`/受保护图层限制，敏感界面的实际可录范围未实测。**
 
 ---
 
 ## 8. 发现六：中国电信自动注册组件（`com.xiaomi.registration`）
 
-> 一句话：这是小米预装的电信终端注册组件，平台签名、与电话应用共享 UID。它**不上传 App 清单**，采集 MEID/IMEI/IMSI/ICCID/MAC/Cell ID 等标识并上报；本机在中国移动卡 + WiFi 条件下已完成注册。
+> 一句话：这是小米预装的电信终端注册组件，平台签名、与电话应用共享 UID。它**不上传 App 清单**，采集 MEID/IMEI/IMSI/ICCID/MAC/Cell ID 等标识并上报；偏好项与代码表明曾成功注册，基于当前 SIM 与分支条件推断可在移动卡 + WiFi 下完成，未捕获该次请求/响应。
 
 ### 8.1 基本信息
 
@@ -605,7 +607,7 @@ SharedPreferences：
 </map>
 ```
 
-`register_regtime` 有值，且同时有 `register_dds_slot` / `register_sw_version`，对应 `AutoRegReceiver` 的成功分支（路径 A）。`sim_iccid` 前 6 位 `898602` 是中国移动，所以本机是**移动卡 + WiFi** 完成电信方向注册。
+`register_regtime` 有值，且同时有 `register_dds_slot` / `register_sw_version`，对应 `AutoRegReceiver` 的成功分支（路径 A）。`sim_iccid` 前 6 位 `898602` 是中国移动，因此**推断**注册时可在移动卡 + WiFi 下完成；但未捕获该次请求/响应，历史 SIM/网络条件不能由当前快照独立证明。
 
 ### 8.5 问题与建议
 
@@ -615,7 +617,7 @@ SharedPreferences：
 | 2 | **持久标识**：IMEI/MEID + IMSI/ICCID 可跨卡追踪设备 |
 | 3 | **位置推断**：Cell ID/TAC + BSSID 可推断粗略位置 |
 | 4 | **权限很大**：共享电话 UID，继承短信/通话记录/相机/联系人 |
-| 5 | **入口开放**：`AutoRegReceiver` / `RegistrationService` 无权限保护 |
+| 5 | **入口开放（静态）**：`AutoRegReceiver` / `RegistrationService` 导出且未见调用方校验；普通应用实际可达性待 PoC |
 | 6 | **明文 HTTP**：路径 B 在满足条件的机型上明文发送 MAC/IP/BSSID/CTEI |
 | 7 | **Header 与载荷不符**：Header 写 `encrypted-json`，实际只是 Base64 编码 |
 
@@ -645,6 +647,8 @@ res/xml/post_params.xml
 AndroidManifest.xml
 ```
 
+上述关键类已加入 `evidence/decompiled/key/AutoRegistration/`。同目录 `AndroidManifest.xml` 由 JADX 1.5.6 对上述 SHA-256 的 APK 执行 `jadx --config none --no-src -d <out> evidence/apk/AutoRegistration.apk` 解码取得；Manifest 显示 `RegistrationService`/`AutoRegReceiver` 导出且未声明权限，`RegistrationJobService` 则受 `BIND_JOB_SERVICE` 保护，不能混同。现有完整源码树 `evidence/decompiled/full/AutoRegistration/` 仅本地保留，先前资源目录为空；公开 Manifest 是此次独立补充，不宣称原完整树已包含资源。
+
 ---
 
 ## 9. 发现七：系统包管理器安装上报
@@ -658,7 +662,7 @@ AndroidManifest.xml
 | 关联组件 | `com.miui.guardprovider` 3.1.4-20260902.0 |
 | 入口 | 文件管理器 `ACTION_VIEW` → `NewInstallerPrepareActivity` |
 | 服务器 | `api.installer.xiaomi.com`、`virus-engine.sec.miui.com`、`*.a.market.xiaomi.com` |
-| 适用边界 | 以下结论适用于 MIUI 安装器 UI。`adb install` / `pm install` 已实测不进入该 UI，未触发 `/avl/upload` |
+| 适用边界 | 以下已确认上报来自 MIUI 安装器 UI。本次两条 `adb install` / `pm install` 测试未进入该 UI，窗口内未观察到 `/avl/upload`，不排除其他或后续链路 |
 
 ### 9.2 结论
 
@@ -667,12 +671,12 @@ AndroidManifest.xml
 | 1 | 打开安装界面即向 `api.installer.xiaomi.com` 发送包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型、APK MD5/签名等，并请求 `/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2` | 实测 |
 | 2 | 点“安装”和点“取消”都会向 `/avl/upload` 上传安装元数据：`installCnt=1/0`，字段含包名、应用名、版本、APK MD5、签名、大小、全部权限、来源、渠道 MD5 | 实测 |
 | 3 | 风险应用会被 GuardProvider 的 Avl 等引擎标记（实测 `Risk/Android.R_Cont.Porn`，level=1）；安装器显示“发现风险”，要求“单次安装授权”+身份验证；取消和授权后安装成功都会上传元数据 | 实测 |
-| 4 | 安装前 GuardProvider 云查 `/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`），字段含包名、版本、证书 MD5/SHA-256、manifest SHA-256 | 实测（服务日志 + DNS/SNI） |
+| 4 | 安装前 GuardProvider 云查 `/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`），字段含包名、版本、证书 MD5/SHA-256、manifest SHA-256 | 实测（服务日志 + DNS/SNI）；字段列表为代码级 |
 | 5 | 云端 per-app 配置返回 `riskType`、`registrationStatus`、`registrationRestrictStatus`、`installNotAllow`、`areaForbiddenInstall`、`rc`、`cInfo`，决定未备案/风险提示、禁止安装和取片指令；全局配置还含 16 条禁装规则、94 个包的离线安装白名单、`oneClick` 授权参数 | per-app：实测（日志）+ 代码；全局配置：实测（只读响应） |
 | 6 | 云端可要求上传 APK 片段/TLSH：`cInfo.cFlag` → `cToken`（AES/CBC/PKCS5，key/IV 来自 `libxiaomiSafe.so`）+ `cOffset/cSize/cMd5`；`tFlag` → TLSH `tInfo` | 代码；本次未触发 |
-| 7 | 云端威胁命中后 `/virus/localResult/report` 上报威胁名/等级、包信息、证书、APK 哈希、MIUI/Android/设备、UUID、`hitFiles`；3.1.4 用 `ReportStore` 文件队列，2.5.6 用 `ReportWorker`。本地 Avl level=1 命中未生成待上报文件 | 代码；本地命中未触发 |
+| 7 | 云端威胁命中后的 `/virus/localResult/report` 代码路径包含威胁名/等级、包信息、证书、APK 哈希、MIUI/Android/设备、UUID、`hitFiles`；3.1.4 用 `ReportStore`，2.5.6 用 `ReportWorker`。本次本地 Avl level=1 命中后检查目录为空，测试窗口内未观察到报告请求，不能证明从未生成文件 | 代码 + 有限窗口观察 |
 | 8 | 安装完成会向本地反诈库 `content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app` 写入 `pkg_name/app_name/install_finish_time/app_tag_id/version_code` | 代码/本地语义 |
-| 9 | `adb install` / `pm install` 安装成功，但不进入 MIUI 安装器 UI，未触发 `/avl/upload`；上述上报只覆盖 UI 路径 | 实测 |
+| 9 | 本次 `adb install` / `pm install` 安装成功，未进入 MIUI 安装器 UI，测试窗口内未观察到 `/avl/upload`；不能排除其他后台或延迟链路 | 实测（本次路径/窗口） |
 | 10 | 风险提示页同时展示第三方应用推荐广告，资源来自 `*.a.market.xiaomi.com` | 实测 |
 
 ### 9.3 关键细节
@@ -695,7 +699,7 @@ AndroidManifest.xml
 | `permission` | 申请的全部权限 | 逗号连接，可能很长 |
 | `appSourcepackageName` / `appSourceValue` | 安装来源包名 / 标签 | 如文件管理器 |
 | `cdMd5` | 渠道包摘要 | 渠道识别 |
-| `installTime` / `installCnt` / `touchInstallCnt` | 时间 / 安装或取消 / 点击计数 | `1` 安装、`0` 取消 |
+| `installTime` / `installCnt` / `touchInstallCnt` | 上报时生成的时间戳 / 安装或取消 / 点击计数 | 取消时也会生成，不证明安装完成 |
 | `apkPath` | 调用方提供的路径 | 可能为空 |
 | `cToken` / `cOffset` / `cSize` / `cMd5` | 云端要求的 APK 加密片段 | 仅 `cInfo.cFlag=true` 时 |
 | `tInfo` / `tFlag` | TLSH 模糊哈希 / 开关 | 仅 `tFlag=true` 时 |
@@ -738,13 +742,13 @@ AndroidManifest.xml
 - 云端把风险样本标为“未备案、未禁止安装”：`regS=[1]`、`regRS=[0]`、`riskType=9999`、`app_manage_scene=off_shelf`。
 - GuardProvider 的 Avl 引擎返回 `Risk/Android.R_Cont.Porn`（threatLevel=1，`forbidden=false`）；安装器显示“发现风险”“安装该应用存在高风险”，随后要求“单次安装授权”并做身份验证。
 - 在风险提示页取消：`/avl/upload` 发送 `installCnt=0`；完成单次安装授权并安装成功：发送 `installCnt=1`，`lastUpdateTime` 更新。两次请求都包含完整应用元数据，均不含威胁名/扫描结果，也未出现 `cToken/tInfo`。
-- 本地 Avl level=1 命中没有生成 `ReportStore` 待上报文件；威胁报告路径仍按代码级记录。
+- 本地 Avl level=1 命中后检查 `ReportStore` 目录为空，测试窗口内未观察到威胁报告请求；不能排除文件曾生成后上传或删除，威胁报告路径仍按代码级记录。
 
 #### 9.3.5 GuardProvider 云查与威胁报告
 
 - 包管理器构造 `ScanRequestArgs.Builder(1)`（安装场景），默认 `useCloudScan=true`；GuardProvider 向 `https://virus-engine.sec.miui.com/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）发送 `CloudScanApkInfo`：包名、版本、证书 MD5、证书 SHA-256、manifest SHA-256。
 - 云端威胁命中后的 `/virus/localResult/report`：3.1.4 使用 `ReportStore`（写 `files/upload/` 后上传），2.5.6 使用 WorkManager `ReportWorker`（约 2 小时延迟）。字段包括威胁等级/名称、恶意代码特征、包信息、证书、APK MD5/SHA-256、MIUI/Android/设备、UUID、`hitFiles`。
-- 本次本地 Avl 一级命中未进入上述队列；**不是每次扫描都会上报威胁报告**。
+- 本次本地 Avl 一级命中后检查目录为空，窗口内未观察到上述报告请求；不能仅凭事后空目录判断是否曾入队，也不能证明每次扫描都上报或都不上报。
 
 #### 9.3.6 APK 片段 / TLSH 能力
 
@@ -759,8 +763,8 @@ AndroidManifest.xml
 
 #### 9.3.8 边界：shell 安装
 
-- `adb install` / `pm install` 均安装成功，但不进入 MIUI 安装器准备界面，未触发 `/avl/upload`；`adb install` 只启动了安装器的包变更处理进程，`pm install` 未启动安装器进程。
-- 因此，本节的上报/风险提示结论只覆盖 MIUI 安装器 UI 路径；使用 shell 安装的用户不会经过同一套上报链路。
+- 本次 `adb install` / `pm install` 均安装成功，未进入 MIUI 安装器准备界面，测试窗口内未观察到 `/avl/upload`；本次进程检查中 `adb install` 只见包变更处理进程，`pm install` 未见安装器进程，不作为长期行为证明。
+- 因此，已确认的上报/风险提示来自 MIUI 安装器 UI 路径；本次两条 shell 安装路径在观察窗口内未出现同一 UI `/avl/upload` 上报，不推广到所有 shell 安装、后续后台组件或延迟上报。
 
 ### 9.4 隐私与安全影响
 
@@ -768,7 +772,7 @@ AndroidManifest.xml
 - **云端可控的取片能力**：`cOffset/cSize` 由服务器决定，意味着服务器可按需取走 APK 任意区间；虽然默认只传元数据，但用户无法从界面得知或拒绝。
 - **威胁报告的路径风险**：`hitFiles` 可能包含用户文件路径；设备名、UUID 与包信息组合后可进一步关联设备。
 - **风险提示与广告同屏**：安全警告下方展示第三方应用推荐，容易分散用户对风险的注意，也存在利益冲突。
-- **安装方式不一致**：MIUI 安装器 UI 会上报，`adb install`/`pm install` 不会；同一台设备因安装方式不同而得到不同的隐私结果。
+- **安装方式存在观察差异**：本次 MIUI 安装器 UI 测试有上报；两条 `adb install`/`pm install` 测试在窗口内未观察到同一 UI `/avl/upload`，不代表设备层面无其他或后续上报。
 - **缺少知情与选择**：没有用户可见的上传范围说明、云端取片提示或威胁报告记录入口。
 
 ### 9.5 主要问题
@@ -814,18 +818,18 @@ AndroidManifest.xml
 
 1. **明文 HTTP 传输元数据**：请求走 `http://`，URL、机型、厂商、时间、大小、`sign` 可被中间人观察。
 2. **弱加密设计**：AES-128-ECB、无 IV、`key = MD5(明文)`，确定性加密；相同明文产生相同密文。
-3. **1024 位 RSA + 100 年有效期**：自签名证书，2019–2119；结构正常（popcount 49.7%，无小因子、无共享素数、无近似素数），但 1024 位已低于现代标准。
-4. **无权限保护的导出组件**：任意本机应用可修改 `SystemHelper` 的上报服务器、触发上报、清空配置；可启动移动 DM 服务、触发心跳。
+3. **1024 位 RSA + 100 年有效期**：自签名证书，2019–2119；结构正常（popcount 49.7%，无小因子、无共享素数、无近似素数），但 1024 位已低于现代标准。该证书用于内置密钥封装，不等同于已证明参与 TLS 校验的证书；公钥加密本身也不提供客户端身份认证。
+4. **导出组件的潜在未授权调用面**：静态检查未见调用方校验；普通第三方应用能否实际修改 `SystemHelper` 上报服务器、触发上报或启动移动 DM，仍需最小 PoC 验证。
 5. **可观测性缺失**：两套 DM 均无用户可见开关/日志；对联通 DM 而言，`operator_service_improve_plan` 是唯一总闸；移动 DM 由云端开关单独控制。
-6. **加密可逆性**：由于 key 由明文派生，任何能获取本地明文（root、备份、队列）的一方都可解密网络流量。
-7. **电信自动注册组件**：路径 B 使用明文 HTTP（MAC/IP/BSSID/CTEI）；`AutoRegReceiver` / `RegistrationService` 导出且无权限保护；`zzhc` 载荷仅为 Base64。
+6. **加密可逆性（仅限匹配明文）**：由于 key 由明文派生，能获取对应本地明文（root、备份、队列）的一方可以还原该条流量；不能据此解密没有匹配明文的未知流量。
+7. **电信自动注册组件**：路径 B 使用明文 HTTP（MAC/IP/BSSID/CTEI）；`AutoRegReceiver` / `RegistrationService` 导出且未见调用方校验（静态，普通应用实际可达性待 PoC）；`zzhc` 载荷仅为 Base64。
 8. **包管理器取消也上报**：用户未安装，`/avl/upload` 仍上传包名、应用名、版本、签名、APK MD5、大小、权限与来源。
 9. **打开安装界面即上报**：尚未确认安装，安装器已向 `api.installer.xiaomi.com` 发送包名、应用名、OAID、机型、区域等信息。
 10. **云端可控取片**：`cInfo.cOffset/cSize` 由服务器决定，可读取 APK 任意区间并 AES-CBC 加密上传；`tFlag` 触发 TLSH 模糊哈希。
 11. **威胁报告含路径**：GuardProvider 命中威胁后上报的 `hitFiles` 可能包含用户文件路径。
 12. **风险应用取消也上报**：在“发现风险”页取消后，仍上传包名、应用名、版本、APK MD5、签名、大小、全部权限与来源。
 13. **风险提示页同屏广告**：高风险警告下方同时展示第三方应用推荐广告，容易分散用户对风险的注意。
-14. **分析埋点包含风险结果**：`request_result=virus`、`risk_app_type=9999`、`app_local_scene=virus_engine` 出现在安装器 OneTrack 分析事件中，尽管未进入威胁报告。
+14. **分析埋点包含风险结果**：`request_result=virus`、`risk_app_type=9999`、`app_local_scene=virus_engine` 出现在安装器 OneTrack 分析事件中；本次窗口内未观察到另一路威胁报告，不等于从未入队。
 
 ---
 
@@ -848,25 +852,42 @@ AndroidManifest.xml
 
 ## 12. 建议
 
-### 12.1 用户侧（可逆）
+### 12.1 用户侧（部分可逆）
+
+> 删除数据库**不可逆**；`cmcc_dm.db` 含多张业务表，不只是待传队列。运行时删除数据库/WAL/SHM 还可能遇到打开句柄、重建和状态不一致。默认建议是**先停用并保留可恢复配置**，不要直接整库删除。
 
 ```bash
-# 1) 关闭运营商服务改进计划（总闸）
+# 0) 先记录原开关值（在同一主机 shell 中保留变量，不上传到公开日志）
+original_plan=$(adb shell settings get secure operator_service_improve_plan | tr -d '\r')
+# 同时记录两个包原来的 enabled 状态；原来已停用的包，恢复时保持停用。
+adb shell pm list packages -d --user 0 com.mobiletools.systemhelper
+adb shell pm list packages -d --user 0 com.miui.dmregservice
+
+# 1) 关闭联通 DM 的服务改进计划（不影响移动 DM）
 adb shell settings put secure operator_service_improve_plan 0
 
-# 2) 清空待传队列
-adb shell su -c 'rm -f /data/user/0/com.mobiletools.systemhelper/databases/systemhelper*'
-adb shell su -c 'rm -f /data/user/0/com.mobiletools.systemhelper/databases/signalhelper*'
-adb shell su -c 'rm -f /data/user_de/0/com.miui.dmregservice/databases/cmcc_dm.db*'
-
-# 3) 停用组件（会影响运营商相关功能，建议先做 1+2）
+# 2) 先停用组件，避免继续写入
 adb shell su -c 'pm disable-user --user 0 com.mobiletools.systemhelper'
 adb shell su -c 'pm disable-user --user 0 com.miui.dmregservice'
 
+# 3) 如需清理，由熟悉 SQLite 的人员确认写入进程已停止后，
+#    在受保护位置制作一致性快照，再受控导出/加密备份。
+#    不默认整库删除，也不把含标识/位置的明文数据库复制到共享 Download。
+
 # 4) 域名封堵：dm.wo.com.cn / a.fxltsbl.com / m.fxltsbl.com / auc.fxltsbl.com
 
-# 5) 包管理器目前无公开的上报开关；安装敏感 APK 时优先使用隔离环境/备用机。
-#    限制 com.miui.packageinstaller 联网会影响云查/广告，且未验证安装成功率，不能视为可靠缓解。
+# 5) 恢复前核对记录：只恢复原先启用的组件，原先停用的保持停用。
+#    示例（仅适用于原先启用的包）：adb shell pm enable --user 0 <包名>
+#    开关按 original_plan 原值恢复；原先输出 null 表示键不存在，应 delete。
+#    original_plan 必须来自步骤 0；若变量丢失，停止并查记录，不猜测为 1。
+#    case "$original_plan" in
+#      null) adb shell settings delete secure operator_service_improve_plan ;;
+#      0|1) adb shell settings put secure operator_service_improve_plan "$original_plan" ;;
+#      *) echo '原值缺失或不属于预期范围，请人工核对，不自动恢复' ;;
+#    esac
+
+# 6) 包管理器目前无公开上报开关；敏感 APK 优先隔离环境/备用机。
+#    限制 com.miui.packageinstaller 联网会影响云查/广告，且未验证安装成功率。
 ```
 
 ### 12.2 厂商/运营商侧
@@ -939,7 +960,7 @@ evidence/
 ├── SHA256SUMS                  # 可直接 sha256sum -c 校验
 ├── apk/                        # 6 个 APK（本地保留，不入库）
 ├── decompiled/
-│   ├── key/                    # 66 个关键类源码（入库）
+│   ├── key/                    # 83 个 Java + 2 个转储/伪代码 + 1 个 Manifest（86 个文件）
 │   └── full/                   # 完整 jadx 源码树（本地保留）
 ├── certificates/               # pub.cer / pub.pem / openssl 文本
 ├── databases/                  # 仅 schema 与行数
@@ -965,4 +986,4 @@ sha256sum -c evidence/SHA256SUMS
 - 取证过程未修改业务逻辑；测试用配置已恢复原值。
 - 本文已移除设备标识、SIM 标识、位置、WiFi、App 清单等个人隐私信息，仅保留技术事实。
 - 文中所述组件均为系统预装、Xiaomi 平台签名，不代表其具有恶意意图；报告关注的是采集范围、加密方式与用户可控性。
-- 包管理器部分基于单台设备、多次安装/取消测试；未使用真实诈骗样本，但使用了一个被 Avl 标记的色情风险样本；用户在真机上完成“单次安装授权”后安装成功，`/avl/upload` 为 `installCnt=1`；`/virus/localResult/report` 未触发；`cToken/tInfo` 未触发；已补测 `adb install`/`pm install` 绕过安装器 UI、未触发 `/avl/upload`；其他 session/企业安装路径未覆盖。
+- 包管理器部分基于单台设备、多次安装/取消测试；未使用真实诈骗样本，但使用了一个被 Avl 标记的色情风险样本；用户完成单次授权后安装成功，`/avl/upload` 为 `installCnt=1`。测试窗口内未观察到 `/virus/localResult/report` 或 `cToken/tInfo`；事后空目录不能排除曾入队后上传/删除。本次两条 shell 安装路径未进入 UI，窗口内未观察到同一 `/avl/upload`，不推广为所有后台或延迟链路均无上报；其他 session/企业安装路径未覆盖。

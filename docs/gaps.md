@@ -6,16 +6,17 @@
 
 ## P0：影响核心结论的缺口
 
-### 1. ~~A 包（App 清单）缺少“可解密的抓包样本”~~ ✅ 已解决（2026-11-05 21:26）
+### 1. A 包：部分解决（R 已闭环；A 当前抓包未闭环）
 
-- 结论：通过把 `appInfoInterval2/Interval` 调至 0/1000 并广播 `BOOT_COMPLETED`，连续请求中服务器返回 `200` 与 `429` 混合；429 的同一明文会写入 `dmregister`，与抓包密文逐字节匹配后成功解密（169 个 App）。
-- 证据：`A_decrypted_live_ID72.json` / `.csv`（私有目录）。
-- 剩余：200 成功的样本仍无法从包解密（协议设计使然），这是预期行为，不是缺口。
+- 已复核：R 包 68,784 字节与本地明文逐字节 AES 匹配，100 条记录。
+- A 包：旧 `A_decrypted_ID59.json` 有 169 个 App；当前 A 抓包（ID72）未找到匹配明文，`A_decrypted_live_ID72.json/.csv` 当前不存在，不能替代 ID72 闭环。
+- 200 成功的 A 样本本次未取得匹配明文，未完成恢复；不能据此证明协议不可恢复。
+- 补法：重新触发 A 上报并保留本地队列/抓包，完成当前样本的逐字节匹配；或在报告中继续标注“旧样本/字段结构”而非“已实测解密当前 A”。
 
 ### 2. 移动 DM 的 HTTPS 内容未解密
 
-- 现状：只拿到 TLS 元数据（连接时间、字节数、SNI）与本地 DB。
-- 影响：无法确认心跳/App 上报的字段级内容与线上格式。
+- 现状：只拿到 TLS 元数据（连接时间、字节数、SNI）与本地 DB。公开计数显示 `app_info_*` 447 行，network/traffic/WiFi/Bluetooth/battery 表 0 行。
+- 影响：无法确认心跳/App 上报的字段级内容与线上格式；表结构不能证明这些字段本次已采集或已发送。
 - 补法：在受控测试环境做 MITM（安装用户 CA + 关闭 pinning），或分析客户端 SDK 的序列化逻辑并重建。
 
 ### 3. 关闭总闸后是否真的停止 — 🟡 短时验证完成，长观察待做
@@ -55,7 +56,7 @@
 
 ### 9. 未验证导出组件的实际可利用性
 
-- 现状：从 manifest 与代码判断 `RegisterHelperService` 无权限保护。
+- 现状：静态判断 `RegisterHelperService` 导出且未见调用方校验；普通应用实际绑定/调用 PoC 尚未完成。
 - 补法：写一个最小 PoC App，实际绑定并调用 `c(String)`，验证能否重定向上报地址（仅在本人设备上）。
 
 ### 10. 未做 TLS 证书与 pinning 检查
@@ -72,14 +73,14 @@
 
 ### 10.2 远程唤醒/触发已评估
 
-- 结论：两套 DM 均无 push/网络监听；触发源只有闹钟、系统广播、本地导出组件、运营商 SMS/STK（间接）。
-- 按作者要求，该节未写入公开报告。
+- 结论：静态检查未发现两套 DM 的 push/网络监听入口；已知触发源为闹钟、系统广播、本地导出组件、运营商 SMS/STK（间接）。
+- 公开报告/执行摘要已写入，但限定为“静态检查未发现；普通应用实际可达性待 PoC”，未写成全局实测否定。
 
 ### 10.3 包管理器上报未做云端威胁命中验证
 
-- 现状：已实测安装/取消都会触发 `/avl/upload`；打开安装界面会触发 `/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode` 与 `/info/layout/v2`；GuardProvider `/risk/scan` 与 `virus-engine` DNS/SNI 已实测。另用一个被本机 Avl 标记的色情风险样本实测：安装器显示“发现风险”，要求“单次安装授权”；在风险提示页取消后仍上传完整安装元数据（`installCnt=0`）；用户完成单次安装授权后安装成功（`installCnt=1`，`lastUpdateTime` 更新）；本地 Avl 一级命中未生成 `ReportStore` 待上报文件，未抓到 `/virus/localResult/report`；`adb install`/`pm install` 成功安装但未进入安装器 UI，未触发 `/avl/upload`；`/v3/cloud_config/query` 的全局配置响应已捕获（`forbiddenList` 16 条、`offlineInstallAppSignList` 94 条、`oneClick` 授权参数）。
+- 现状：安装器打开、安装、取消时的相关请求有端点日志，网络抓包确认域名/TLS；GuardProvider 云查有服务日志和 DNS/SNI，`/risk/scan` 字段列表来自代码。风险样本 Avl 命中，取消上传 `installCnt=0`，单次授权后安装成功并上传 `installCnt=1`。检查时 `ReportStore` 目录为空，窗口内未观察到 `/virus/localResult/report`，不能排除曾生成后上传/删除；本次两条 shell 安装测试窗口内未出现同一 UI `/avl/upload`，不排除其他/延迟链路。全局配置已捕获（16 条禁装规则、94 条离线白名单、`oneClick` 参数）。
 - 未覆盖：per-app `CloudParams` 的完整响应；云端威胁命中（非本地 Avl）后的 `/virus/localResult/report`；`cToken/tInfo` 未触发；`adb install` / `pm install` 已测，绕过 UI 上报；其他 session/企业安装路径未覆盖；单次安装授权与安装成功已实测；小米账号密码/人脸等其他验证方式未覆盖。
-- 补法：在隔离环境用云端已知命中的样本（或可控响应）验证威胁报告；MITM 或 Frida 观察 `cInfo.cFlag/tFlag` 响应；在测试机设置临时锁屏/指纹后完成一次风险应用安装；单独验证 `pm install` 是否绕过安装器 UI 上报。
+- 补法：在隔离环境用云端已知命中的样本（或可控响应）验证威胁报告；MITM 或 Frida 观察 `cInfo.cFlag/tFlag` 响应；单次安装授权与安装成功已实测，`pm install` 已测绕过 UI；剩余是其他 session/企业安装路径、其他身份验证方式。
 
 ---
 
@@ -87,12 +88,12 @@
 
 ### 11. 仅覆盖单机型 / 单系统版本
 
-- 现状：一台 Redmi Note 14 Pro，HyperOS 3.0.306。
+- 现状：一台 Xiaomi HyperOS 3.0 设备（具体型号不公开）。
 - 补法：在其它机型、其它 HyperOS/MIUI 版本上重复取证，比较组件差异。
 
-### 12. 未覆盖中国电信及其它运营商 DM
+### 12. 电信自动注册已覆盖，其他分支/机型未覆盖
 
-- 现状：只发现联通（SystemHelper）与移动（DMRegService）。
+- 现状：已分析 `com.xiaomi.registration`（AutoRegistration）的路径 A/B/C；其他电信分支、双卡/漫游/机型差异未覆盖。
 - 补法：检查 `com.ct.*`、`com.miui.dmregservice` 的电信分支、`/product/priv-app` 下其它 RegService。
 
 ### 13. 未分析系统级日志与诊断通道
@@ -104,9 +105,10 @@
 
 ## P3：报告与工程化缺口
 
-### 14. 缺少一页 Executive Summary
+### 14. Executive Summary 已有，一页版待定
 
-面向非技术读者的 1 页摘要（现状、风险、建议）。
+- 现状：已有 `docs/executive_summary.md` 与 3 页 PDF。
+- 待办：如需面向非技术读者的严格 1 页版，另行压缩；当前不再标记为“缺少”。
 
 ### 15. 缺少图
 
@@ -114,9 +116,10 @@
 - 时间线图（安装、首次上报、抓包、解密）
 - 攻击面图（导出组件、权限、网络）
 
-### 16. 缺少证据哈希清单与签收
+### 16. 公开证据哈希清单已有，私有证据签收待评估
 
-每个证据文件（pcap / DB / 导出 JSON）应附 SHA-256，便于复核。
+- 现状：`evidence/MANIFEST.md` + `evidence/SHA256SUMS` 已覆盖公开文件，`sha256sum -c` 通过。
+- 待办：私有 pcap/DB/导出 JSON 的哈希与签收是否完整，另行评估；不在公开仓库承诺。
 
 ### 17. 缺少法律与合规章节
 
@@ -128,10 +131,10 @@
 
 DM、LwM2M、CoAP、IMSI/ICCID、TAC/CID、PCI、RSRP/SINR 等。
 
-### 19. 工具未做参数化与测试
+### 19. 工具已补回归测试，仍有限制
 
-- `tools/pcap_tcp.py`：目前按 SLL2 解析，需支持 Ethernet/SLL、IPv6 扩展头、乱序/重传。
-- `tools/decrypt_match.py`：需支持大包、并发流、按时间窗口匹配。
+- 已修：SYN 序列号、缺口标记、IPv6 格式、无 SYN 简单乱序/序列号回绕；HTTP 拒绝负数、非法/重复长度与不支持的 Transfer-Encoding；重传冲突标为不完整，不对含缺口/冲突的流做明文匹配。合成输入回归测试 20/20 通过。
+- 仍限：IPv6 扩展头、乱序/重传的复杂组合、大包/并发流、按时间窗口匹配未全面覆盖；工具只用于已验证完整的特定样本。
 
 ### 20. 缺少 CI / 发布流程
 

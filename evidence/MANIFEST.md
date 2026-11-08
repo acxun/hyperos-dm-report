@@ -95,13 +95,30 @@
 | `evidence/decompiled/key/MIUIGuardProvider/com/miui/guardprovider/sdk/android/work/ReportWorker.java` | 11KB | `cd459fadcd8128543024ce6f235e9891e140ba5f3471a8d5ffd494af1240fd83` |
 | `evidence/decompiled/key/MIUIGuardProvider/com/miui/guardprovider/sdk/android/pojo/networkdomain/CloudScanApkInfo.java` | 7KB | `36dbc850a7e05b1fb7d039eb38186b5bd83ec2043f0b4e38e606dbe10a17893d` |
 | `evidence/redacted/cloud_config_global_summary.md` | 2KB | `98a13f55389ac50c7199a49aa394c538668d5bc9e3c7975434f24330009667a2` |
-| `evidence/redacted/package_installer_upload.log` | 5KB | `07c25d48d2da8db4a1ed3f82aea032555110244d5f0fedad83d2f87108fbc21f` |
-
+| `evidence/redacted/package_installer_upload.log` | 5KB | `1db39bbf41cd276f9e3a95286c59d7540c44800b2777b5cc1c016e6855ef632d` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/bx.java` | 1KB | `4d165800e98482a183d54762dfdfef914c7da390fcd64ec3ff4c30d634480751` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/rd2.java` | 1KB | `a05d7b544004b4bdc67e8fdf2384fe1f2d98b53d803c51edebbcbe441aa736bd` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/ec2.java` | 12KB | `bc9407324b4880a574989c37e7459b6313b224c5a8e7e159cc026a5ab1c15daa` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/s82.java` | 5KB | `633049810ce75733af78d02957911e33e8d7130db63c7e09f179b9add00d4732` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/fx.java` | 1KB | `cdd69633b62fb735966301776fa902e2c1f0ae5149f263d905a2bb364eca3499` |
+| `evidence/decompiled/key/AutoRegistration/com/xiaomi/registration/autoregistration/AutoRegReceiver.java` | 13KB | `4728e8cc0744a1a266390fbfb3063553b539a437654533af3df0d3043c70d146` |
+| `evidence/decompiled/key/AutoRegistration/com/xiaomi/registration/autoregistration/RegistrationJobService.java` | 3KB | `503cb63a13e30e8d929658058f8e8db97ba5b980cde2ff32e01e0cdd32cfe075` |
+| `evidence/decompiled/key/AutoRegistration/com/xiaomi/registration/autoregistration/RegistrationService.java` | 2KB | `51f4baa75b5db4802d42b8dc2f4c17ced6d8866ccebaa393ec190ad1c626d08d` |
+| `evidence/decompiled/key/AutoRegistration/i1/j.java` | 41KB | `551e54f76b5a26e082dfc275eca338168a931447f64b892c58172662a7cf0c99` |
+| `evidence/decompiled/key/AutoRegistration/i1/l.java` | 5KB | `7930b4729109294853dd77b35f19dcad207f146c9b225049b50fd48c2a91cf5a` |
+| `evidence/decompiled/key/AutoRegistration/i1/m.java` | 19KB | `4ec6c0f3e036abc5f3c08622e7263da309c9e4ed21e5154dd8d13da284aaf682` |
+| `evidence/decompiled/key/AutoRegistration/i1/p.java` | 20KB | `508bbf70dc916e3562b855d9808cd60c769259b615226a6a88326a039a46a8db` |
+| `evidence/decompiled/key/AutoRegistration/i1/q.java` | 2KB | `af0c6bcd9e55f32c122e7a8ffa0e69fd9a07f6c26dfa1f87ffb15b3dd1cf4256` |
+| `evidence/decompiled/key/AutoRegistration/i1/w.java` | 1KB | `ec8e04f1a6acca8b87e2721eb843f7654150bc2ad8634df9184f79ac3149911b` |
+| `evidence/decompiled/key/AutoRegistration/j1/b.java` | 2KB | `6a600c95897da78b5420edf3b558b256ece42483cbe3a8a3f49844a407bb4e1e` |
+| `evidence/decompiled/key/AutoRegistration/j1/c.java` | 4KB | `26e1d2e00c349fbd82583b5917850f2e597eab6575b80ac9d8aa8e3a2650070f` |
+| `evidence/decompiled/key/AutoRegistration/k1/d.java` | 7KB | `6d76f41b34b8996c595cfaad73fdd0d131d1f1a2affb6bd8f49dd6bb491c1c59` |
+| `evidence/decompiled/key/MIUIGuardProvider/defpackage/k43.java` | 1KB | `ae05229fb635f6610acba4b6ea2d944aa1db9a44a4780ebc3e4c023c62645daa` |
+| `evidence/decompiled/key/MIUIGuardProvider/defpackage/re3.java` | 30KB | `4fe45d24dfef2e6ac0b4f6968d3e2aac4b2cf0e9b2266f2be8d5d5218a8ef68c` |
+| `evidence/decompiled/key/MIUIGuardProvider/defpackage/u23.java` | 2KB | `99d7016766179c11edc197c00fc97554524e47500e7776f26266e09dcde030cf` |
+| `evidence/decompiled/key/MIUIGuardProvider/defpackage/x7.java` | 4KB | `fac523b1424bc87f538bc65c65312f4d2e838decf64d2f7c0026b24386c54dbd` |
+| `evidence/decompiled/key/AutoRegistration/AndroidManifest.xml` | 4KB | `d003603311e203e09a0cf02bccccc5c495f661ae06e2812fd2c1b34f0e374a13` |
+| `evidence/decompiled/key/MIUIGuardProvider/defpackage/x7_o.debug.txt` | 6KB | `485f4893f0cb0257651420fc559d54c6b805c9226fc981b370fd698f2bb8e635` |
 
 ## 完整反编译树（本地保留，不入库）
 
@@ -111,8 +128,8 @@
 | `evidence/decompiled/full/RegService/` | 1164 | 6MB |
 | `evidence/decompiled/full/SecurityCenter/` | 12430 | 77MB |
 | `evidence/decompiled/full/SystemHelper/` | 548 | 4MB |
-| `evidence/decompiled/full/PackageInstaller/` | 5409 | 41MB |
-| `evidence/decompiled/full/AutoRegistration/` | 1071 | 8MB |
+| `evidence/decompiled/full/PackageInstaller/` | 5409 | 45MB |
+| `evidence/decompiled/full/AutoRegistration/` | 1071 | 8.5MB |
 
 ## 说明
 
@@ -126,12 +143,21 @@
 | `evidence/apk/SecurityCenter.apk` | `com.miui.securitycenter` | — | 1000 |
 | `evidence/apk/PackageInstaller.apk` | `com.miui.packageinstaller` | 5.5.7.0.0-20261012 (55700) | 10126 |
 | `evidence/apk/AutoRegistration.apk` | `com.xiaomi.registration` | 15.1.22 (63) | 1001 |
+| `private/apk/MIUIGuardProvider-3.1.4.apk` | `com.miui.guardprovider` | 3.1.4-20260902.0 (330) | 10152 |
+
+> 3.1.4 APK 的 SHA-256：`eff2c614d054263068e931f859f2e9fb4c66e31f960d815ab507abbdff15bb5d`（仅本地 `private/apk/`，不入库）。
 
 ### 反编译
 
 - 工具：JADX 1.5.6，`jadx -d <out> --no-res <apk>`
 - 完整源码树：`evidence/decompiled/full/<App>/`（不入库）
 - 关键类：`evidence/decompiled/key/<App>/`（入库），覆盖采集、加密、上报、队列、组件暴露等逻辑
+
+### v1.5.1 补充证据的来源与限制
+
+- 关键目录共 86 个文件：83 个 Java、2 个转储/伪代码、1 个 Manifest。
+- `AutoRegistration/AndroidManifest.xml`：JADX 1.5.6，`jadx --config none --no-src -d <out> evidence/apk/AutoRegistration.apk`，输出成功；与解码结果逐字节一致，不含用户运行时数据。先前完整源码树的资源目录为空，此次 Manifest 独立加入关键目录。
+- `defpackage/x7_o.debug.txt`：由本地 3.1.4 APK 的 debug 方法转储截取，内含 APK SHA-256、完整命令、非连续节选范围。JADX 仍因结构化反编译失败返回 3，指令级伪代码可见，不作为成功编译的 Java；原 `x7.java` 占位体不覆盖。本次执行未运行 APK，未验证运行时上传。该节选的每个指令行已与本次生成的 debug 输出逐行比对。
 
 ### 证书
 
@@ -154,7 +180,7 @@
 
 ### 解密数据（private，不入库）
 
-- `private/A_decrypted_live_ID72.json/.csv`：169 个 App
+- 当前 A 抓包（ID72）未找到匹配明文；旧 `private/A_decrypted_ID59.json/.csv` 有 169 个 App，不能替代 ID72 闭环
 - `private/R_decrypted_ID47.json/.csv`：100 条位置/基站
 - `private/A_decrypted_ID59.json/.csv`：队列明文（旧）
 - `private/report_internal.md`：含隐私数据的内部报告

@@ -99,6 +99,6 @@ sign = Base64(RSA/ECB/PKCS1(pub.cer, key)) in query string
 
 - 网络侧：对 `dm.wo.com.cn:18080`、`a.fxltsbl.com`、`m.fxltsbl.com:5683`、`event-log.cnbj1.mi-fds.com` 做域名/SNI 监控。
 - 主机侧：检查上述包名、`/system/priv-app/SystemHelper`、`/product/priv-app/RegService`。
-- 安装器侧：监控 `api.installer.xiaomi.com` 的 `/avl/upload`、`/info/layout/v2`、`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`，以及 `virus-engine.sec.miui.com` 的 `/risk/scan`（3.1.4）与 `/virus/localResult/report`；风险提示页还会加载 `*.a.market.xiaomi.com` 广告资源。
+- 安装器侧：监控 `api.installer.xiaomi.com` 的 `/avl/upload`、`/info/layout/v2`、`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`，以及 `virus-engine.sec.miui.com` 的 `/risk/scan`（3.1.4）与 `/virus/localResult/report`；风险提示页还会加载 `*.a.market.xiaomi.com` 广告资源。被动网络侧只能看到域名/SNI/IP；要匹配 HTTPS 路径需端点日志或可解密代理。
 - 数据侧：检查 `.../databases/systemhelper`（表 `dmregister`）、`.../databases/cmcc_dm.db`、`/data/misc/user/0/securitycenter/fraud_detection_data.db`。
 - 证书侧：匹配 `pub.cer` 的 SHA-256 / 序列号 `528B9360`。

@@ -56,8 +56,9 @@ I/CloudScanner: Scanning...
 
 抓包摘要：
 
-- `tcpdump -i any` 抓到 `api.installer.xiaomi.com:443`（`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2`、`/avl/upload`）；
-- 抓到 `virus-engine.sec.miui.com` 的 DNS 查询与 TLS SNI。
+- 请求路径来自 `logcat`/hook：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2`、`/avl/upload`；
+- `tcpdump -i any` 只确认到 `api.installer.xiaomi.com:443` 的 TLS 连接/DNS，不能从加密 pcap 读取路径或字段；
+- 抓到 `virus-engine.sec.miui.com` 的 DNS 查询与 TLS SNI；`/risk/scan` 的字段列表来自代码级/请求构造，未从 pcap 解密。
 
 ## 5. per-app 云控
 
@@ -195,16 +196,16 @@ firstInstallTime=2026-11-08 21:54:11
 
 请求中未出现 `cToken`/`cOffset`/`cSize`/`tInfo`。
 
-### 7.6 未触发威胁报告
+### 7.6 本次窗口内未观察到威胁报告
 
 ```text
 $ ls /data/data/com.miui.guardprovider/files/upload
 （空）
 ```
 
-安装成功后再次检查：未观察到 `/virus/localResult/report` 请求；未生成 `ReportStore` 待上报文件。该本地 Avl 一级命中未进入威胁报告队列。
+安装成功后再次检查：`files/upload` 为空，窗口内未观察到 `/virus/localResult/report` 请求。这只能说明本次检查未见待传文件，不能证明该命中从未入队（文件可能已上传或删除）。
 
-> 应用名、包名、APK 哈希、签名、版本号、渠道摘要均已脱敏；原始 pcap 仅在本地 `private/pcap/package_installer_risk.pcap`。
+> 应用名、包名、APK 哈希、签名、版本号、渠道摘要均已脱敏；原始 pcap 仅在本地 `private/pcap/`（`package_installer_install6.pcap`、`package_installer_baseline7.pcap`、`package_installer_risk.pcap`、`package_installer_risk_install.pcap`）。
 
 ## 8. 复现命令（概要）
 
@@ -227,5 +228,5 @@ adb pull /data/local/tmp/install.pcap
 
 - `adb install -r pkgtest2-v2.apk`：安装成功（incremental install），`lastUpdateTime` 更新；MIUI 安装器进程启动，但未出现 `NewInstallerPrepareActivity` / `InstallStart`，未抓到 `/avl/upload`。
 - `adb shell pm install -r /data/local/tmp/pkgtest2.apk`：`Success`；`pidof com.miui.packageinstaller` 为空，无 `MIUIPI_*` / `/avl/upload` 日志。
-- 结论：shell 安装路径绕过 MIUI 安装器 UI，未触发安装器上报；`/avl/upload` 只覆盖 UI 路径。
+- 结论：本次两条 shell 安装测试未进入 MIUI 安装器 UI，观察窗口内未见同一 UI `/avl/upload` 上报；不推广为所有 shell 安装或其他后台/延迟链路均不上报。
 - 测试包 `com.example.pkgtest` 已卸载；调试开关已删除。

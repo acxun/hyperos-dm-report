@@ -1,0 +1,79 @@
+# GuardProvider 3.1.4 — x7.o 调试指令转储节选
+
+APK: private/apk/MIUIGuardProvider-3.1.4.apk (不公开)
+SHA-256: eff2c614d054263068e931f859f2e9fb4c66e31f960d815ab507abbdff15bb5d
+工具: JADX 1.5.6；提取日期: 2026-11-08。
+命令（输出目录可替换）:
+jadx --config none --no-res --show-bad-code --comments-level debug \
+  --single-class defpackage.x7 --single-class-output /tmp/opencode/report-fix-x7.java \
+  -d /tmp/opencode/report-fix-gp private/apk/MIUIGuardProvider-3.1.4.apk
+
+限制: JADX 返回 exit=3，RegionMakerVisitor 报 StackOverflowError；不能视为成功恢复
+结构化 Java。它仍在 o(Object) 方法注释中输出寄存器/跳转转储。
+下列非连续节选逐行保留该转储文本（只去掉缩进；省略处明确标注）。
+这是 JADX 的指令级伪代码，不是原始 Kotlin/Java 或原始 smali，也不是运行时观察。
+原有 x7.java 的默认反编译占位体保留；本文件补充实际可核对的循环控制流。
+
+## 常量和循环入口（省略恢复协程状态与创建 recorder 的代码）
+r6 = 3
+r7 = 2
+L54:
+boolean r14 = defpackage.az0.D(r0)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+if (r14 == 0) goto Le2
+r2.x()     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+vg3 r14 = defpackage.vd0.b     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+xd0 r14 = defpackage.xd0.SECONDS     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+long r10 = defpackage.tn.D(r6, r14)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.h = r0     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.f = r2     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.g = r5     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+long r10 = defpackage.f03.L(r10)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+java.lang.Object r14 = defpackage.f03.t(r10, r13)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+
+## 停止录制和空结果分支（省略挂起返回分支）
+L7c:
+java.nio.file.Path r14 = r2.y()     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+if (r14 != 0) goto L83
+goto L54
+L83:
+w60 r10 = defpackage.xc0.a     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+o60 r10 = defpackage.o60.d     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+w7 r11 = new w7     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r12 = 0
+r11.<init>(r9, r14, r8, r12)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.h = r0     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.f = r2     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.g = r7     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+java.lang.Object r14 = defpackage.uk3.E(r10, r11, r13)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+
+## 命中停止、未命中等待与回边（省略结果日志和挂起恢复的辅助赋值）
+L9a:
+java.lang.Boolean r14 = (java.lang.Boolean) r14     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+boolean r14 = r14.booleanValue()     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+[省略：场景映射和 video scam detection result 日志]
+if (r14 == 0) goto Lc3
+com.miui.guardprovider.aiguard.AiGuardService.a(r9, r10)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r9.stopSelf()     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+goto Le2
+Lc3:
+vg3 r14 = defpackage.vd0.b     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+xd0 r14 = defpackage.xd0.SECONDS     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+long r10 = defpackage.tn.D(r7, r14)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.h = r0     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.f = r2     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+r13.g = r6     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+long r10 = defpackage.f03.L(r10)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+java.lang.Object r14 = defpackage.f03.t(r10, r13)     // Catch: java.lang.Throwable -> L20 java.lang.Exception -> L23 java.util.concurrent.CancellationException -> Lf5
+[省略：挂起标志转换；非挂起完成时继续下面的回边]
+if (r14 != r1) goto L54
+Le1:
+return r1
+Le2:
+java.lang.Object r13 = r2.c
+android.media.MediaRecorder r13 = (android.media.MediaRecorder) r13
+r13.release()
+return r3
+
+交叉定位: re3.java 的 x()/y() 分别包含 start()/stop()；SECONDS 与 r6=3、r7=2
+说明转储中的两段时长参数。f03 的时长转换/挂起函数和 w7 的检测调用仍应结合
+完整反编译树核对；本节选不独立证明所有依赖函数的实现，也不证明实际录屏上传成功。
