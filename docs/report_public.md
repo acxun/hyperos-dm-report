@@ -468,15 +468,17 @@ Manifest 声明 16 个权限；因共享电话 UID，实际继承 `READ_SMS`、`
 
 未发现读取短信收件箱、通话记录、联系人或相机的代码。
 
-### 8.2 三条上报路径
+### 8.2 注册分支与发送方式
 
-| 路径 | 地址 | 传输 | 本机 |
+顶层在 A/B 之间二选一；C 是选中 A 后初始化的短信注册机制，不是与 A/B 平级的第三个分支。
+
+| 路径 | 地址 | 传输 | 本机证据 |
 |---|---|---|---|
-| A | `https://zzhc.vnet.cn` | HTTPS；body 为 Base64(JSON) | **是** |
-| B | `http://typdm.tydevice.com?jsonstr=...` | HTTP 明文；JSON 在 URL | 否 |
-| C | 短信 `10659401` | 二进制短信，明文 | 否 |
+| A | `https://zzhc.vnet.cn` | HTTPS；body 为 Base64(JSON) | 偏好项与代码表明曾注册，未捕获该次请求/响应 |
+| B | `http://typdm.tydevice.com?jsonstr=...` | HTTP 明文；JSON 在 URL | 未实际触发 |
+| C | 短信 `10659401` | 二进制短信，明文 | 未实际触发 |
 
-路径 A 与 B 共用同一个选择条件，A 是 `z2 == false` 的分支：
+**A/B 选择条件**（属性读取与 `k1.d.d()` 展开后的等价表达）：
 
 ```java
 z2 = (ro.radio.noril && ro.ril.oem.ctei 非空)
@@ -486,59 +488,7 @@ z2 == true  → B（typdm）
 z2 == false → A（zzhc）
 ```
 
-也就是说：**不是“无 RIL + CTEI”设备，也不是 `ruan`/`koto`/`organ` 三款非电信定制平板的设备，走 A。**
-
-A 的实际发送还受 `p` 的运行时条件限制：
-
-- 任一 SIM 就绪、非漫游、`device_provisioned=1`；
-- SIM ICCID 变化、周期触发、系统版本变化、5G 开关变化或默认数据卡变化；
-- 若当前是蜂窝网络且默认数据卡不是电信卡，则跳过；WiFi 下放行；
-- 满足后由 `p` 调度 `RegistrationJobService`，走 `zzhc`。
-
-路径 C 不是独立的顶层路径：它由 A 的 `p` 初始化（`p` 构造函数中创建 `j[]`）。选 B 时不会初始化 C；选 A 时 C 可与 A 的 HTTP 注册并存，但受电信卡、IMS 能力、在途注册 ID 限制。
-
-**路径 A**：`i1/p.java` → `RegistrationJobService` → `i1/l.java`（按 `post_params.xml` 收集）→ `i1/m.java` case 0。响应 `resultCode == "0"` 视为成功。Header 写 `encrypted-json`，但代码只做 Base64，没有 AES/RSA。
-
-**路径 B**：`j1/c.java` → `j1/b.java` → `i1/m.java` case 1。发送 `VER / CTEI / MAC / IP / UPLINKMAC / LINK / FWVER / DATE`。只在以下条件走：
-
-```java
-boolean z2 =
-    (e.c("ro.radio.noril") && !TextUtils.isEmpty(e.g("ro.ril.oem.ctei", "")))
-    || d.d();
-```
-
-拆开看：
-
-| 部分 | 代码 | 意思 |
-|---|---|---|
-| 左半 | `e.c("ro.radio.noril")` | `SystemProperties.getBoolean("ro.radio.noril", false)`。表示设备没有常规蜂窝 radio（RIL）。 |
-| 左半 | `e.g("ro.ril.oem.ctei", "")` | `SystemProperties.get("ro.ril.oem.ctei", "")`。OEM 写入的 CTEI（China Telecom Equipment Identity，电信终端标识）；非空才满足。 |
-| 左半整体 | 两者同时满足 | 没有常规蜂窝 radio、但 OEM 写了 CTEI 的设备。 |
-| 右半 | `d.d()` | `k1.d` 的静态方法，展开就是下面的“机型白名单 + 非电信定制版”。 |
-
-`k1.d.d()` 展开：
-
-```java
-return ("ruan".equals(Build.DEVICE)
-        || "koto".equals(Build.DEVICE)
-        || "organ".equals(Build.DEVICE))
-       && !Build.IS_CT_CUSTOMIZATION;
-```
-
-| 右半拆项 | 意思 |
-|---|---|
-| `Build.DEVICE in {ruan, koto, organ}` | 设备代号是三款红米平板之一 |
-| `!Build.IS_CT_CUSTOMIZATION` | `Build.IS_CT_CUSTOMIZATION` 是 MIUI 的“电信定制版”标志；取反表示**非电信定制版**才命中 |
-
-所以：
-
-```
-z2 = 左半（无 RIL + CTEI） || 右半（三款非定制平板）
-```
-
-右半就是 `k1.d.d()`，不是另一段独立逻辑。
-
-代号对照：
+其中 `ro.radio.noril` 按布尔属性读取（默认 false），表示无常规蜂窝 RIL；`ro.ril.oem.ctei` 是 OEM 写入的电信终端标识；`Build.IS_CT_CUSTOMIZATION` 是电信定制版标志。满足“无 RIL 且 CTEI 非空”，或命中下列代号且为非电信定制版时，选择 B；否则选择 A。这是分支选择，不是安全校验。本机 `z2=false`，选择 A。
 
 | 代号 | 机型 |
 |---|---|
@@ -546,15 +496,22 @@ z2 = 左半（无 RIL + CTEI） || 右半（三款非定制平板）
 | `koto` | Redmi Pad 2 4G |
 | `organ` | Redmi Pad 2 Pro 5G |
 
-它不是安全校验；返回 true 走 B（CTEI），false 走 A（Qualcomm/zzhc）。本机不在名单里，`z2 = false`，走路径 A。
+**A 的实际发送条件**：分支选择不等于立即发送，还受 `i1/p.java` 的运行时条件限制：
 
-**路径 C**：`i1/j.java` → `i1/q.java` → `i1/w.java`，发送
+- 任一 SIM 就绪、非漫游、`device_provisioned=1`；
+- SIM ICCID 变化、周期触发、系统版本变化、5G 开关变化或默认数据卡变化；
+- 若当前是蜂窝网络且默认数据卡不是电信卡，则跳过；WiFi 下放行；
+- 满足后由 `p` 调度 `RegistrationJobService`，走 `zzhc`。
 
-```xml
-<a><b>型号</b><c>IMEI1</c><d>IMEI2</d><e>IMSI</e><f>系统版本</f><g>卡槽/网络</g></a>
-```
+**C 与 A 的关系**：`p` 构造函数创建 `j[]`，因此选 B 时不初始化 C；选 A 时，短信注册可与 HTTPS 注册并存，但受电信卡、IMS 能力、在途注册 ID 等条件限制。ICCID 需以 `898603`/`898611`/`898612` 开头；本机为移动卡 `898602…`，未触发 C。
 
-要求 ICCID 以 `898603`/`898611`/`898612` 开头；本机是移动卡 `898602…`，未触发。
+**发送链路与协议定位**（字段清单统一见 §8.3）：
+
+| 路径 | 代码链路 | 协议细节 |
+|---|---|---|
+| A | `i1/p.java` → `RegistrationJobService` → `i1/l.java` → `i1/m.java` case 0 | 按 `post_params.xml` 收集；`resultCode == "0"` 视为成功；Header 写 `encrypted-json`，但载荷仅 Base64 编码，没有 AES/RSA |
+| B | `j1/c.java` → `j1/b.java` → `i1/m.java` case 1 | JSON 放入 URL 的 `jsonstr` 参数，走明文 HTTP |
+| C | `i1/j.java` → `i1/q.java` → `i1/w.java` | XML 载荷经二进制短信发送 |
 
 ### 8.3 采集字段
 
@@ -577,9 +534,13 @@ POWER
 TAC1 / TAC2
 ```
 
-路径 B 额外：`VER / CTEI / MAC / IP / UPLINKMAC / LINK / FWVER / DATE`。
+路径 B：`VER / CTEI / MAC / IP / UPLINKMAC / LINK / FWVER / DATE`。这是 B 自身的字段，不表示在 A 的字段上追加。
 
-路径 C：型号 / IMEI1 / IMEI2 / IMSI / 系统版本 / 卡槽与网络状态。
+路径 C 的 XML 字段：
+
+```xml
+<a><b>型号</b><c>IMEI1</c><d>IMEI2</d><e>IMSI</e><f>系统版本</f><g>卡槽/网络</g></a>
+```
 
 ### 8.4 触发与本机状态
 
