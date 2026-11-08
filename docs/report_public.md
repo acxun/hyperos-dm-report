@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.4.4
+- 版本：v1.4.5
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -674,6 +674,29 @@ AndroidManifest.xml
 | 8 | 安装完成会向本地反诈库 `content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app` 写入 `pkg_name/app_name/install_finish_time/app_tag_id/version_code` | 代码/本地语义 |
 | 9 | `adb install` / `pm install` 安装成功，但不进入 MIUI 安装器 UI，未触发 `/avl/upload`；上述上报只覆盖 UI 路径 | 实测 |
 | 10 | 风险提示页同时展示第三方应用推荐广告，资源来自 `*.a.market.xiaomi.com` | 实测 |
+
+**三个时点**
+
+- **打开安装界面（尚未确认）**：安装器向 `api.installer.xiaomi.com` 发送包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型，并请求 `/v3/cloud_config/query`（全局/按包配置）、`/v4/game/interceptcheck/safemode`（APK 签名/MD5/`antifraudLabel` 等）、`/info/layout/v2`（布局/广告）。
+- **点“安装”或“取消”**：都向 `/avl/upload` POST JSON；`installCnt=1` 表示安装，`0` 表示取消；字段包括包名、应用名、版本、APK MD5、签名摘要、大小、全部权限、来源、渠道 MD5、点击计数；服务器返回 `{"data":"succ","code":200}`。
+- **风险应用**：GuardProvider 的 Avl 引擎命中后，安装器显示“发现风险”和“单次安装授权”；取消和授权后安装成功都会上传上述元数据，但 `/avl/upload` 中不带威胁名或扫描结果。
+
+**云端配置与取片**
+
+- per-app 配置可返回 `riskType`、`registrationStatus`（1=未备案/2=已备案/3=无需备案）、`registrationRestrictStatus`（1=禁止安装）、`installNotAllow`、`areaForbiddenInstall`、`rc`（安装频率/身份验证）、`cInfo`（取片指令）。
+- 全局配置（同端点，实测约 44 KB）：16 条包/版本禁装规则、94 个包的离线安装哈希白名单、`oneClick` 授权参数（`authTimeout=1500`、`preValidationSwitch=0` 等）、取消页文案；这些是云端下发策略，不是上报。
+- 取片能力：`cInfo.cFlag=true` 时，安装器读取 `[cOffset, cOffset+cSize)`，用 AES/CBC/PKCS5 加密后写入 `cToken`，并上传 `cOffset/cSize/cMd5`；`tFlag=true` 时计算 TLSH `tInfo`。本次未触发，属于代码级能力。
+
+**风险应用与威胁报告**
+
+- 实测样本被 Avl 标记为 `Risk/Android.R_Cont.Porn`（level=1，`forbidden=false`）；安装器显示“发现风险”，要求“单次安装授权”+身份验证；取消时 `installCnt=0`，授权后安装成功 `installCnt=1`。
+- GuardProvider 云查请求 `/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`），字段为包名、版本、证书 MD5/SHA-256、manifest SHA-256；请求发往 `virus-engine.sec.miui.com`。
+- 云端威胁命中后的 `/virus/localResult/report`：3.1.4 用 `ReportStore` 写 `files/upload/` 后上传，2.5.6 用 `ReportWorker`；字段包括威胁名/等级、包信息、证书、APK 哈希、设备、UUID、`hitFiles`。本次本地 Avl level=1 命中未生成待上报文件。
+
+**边界**
+
+- `adb install` / `pm install` 实测安装成功，但不进入 MIUI 安装器 UI，未触发 `/avl/upload`；因此上述上报绑定 UI 路径，不是所有安装都会发生。
+- 风险提示页同时展示第三方应用推荐广告（`*.a.market.xiaomi.com`），安全警告与广告同屏。
 
 ### 9.3 主要问题
 
