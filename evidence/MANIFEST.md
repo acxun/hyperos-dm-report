@@ -95,6 +95,8 @@
 | `evidence/decompiled/key/MIUIGuardProvider/com/miui/guardprovider/sdk/android/work/ReportWorker.java` | 11KB | `cd459fadcd8128543024ce6f235e9891e140ba5f3471a8d5ffd494af1240fd83` |
 | `evidence/decompiled/key/MIUIGuardProvider/com/miui/guardprovider/sdk/android/pojo/networkdomain/CloudScanApkInfo.java` | 7KB | `36dbc850a7e05b1fb7d039eb38186b5bd83ec2043f0b4e38e606dbe10a17893d` |
 | `evidence/redacted/cloud_config_global_summary.md` | 2KB | `98a13f55389ac50c7199a49aa394c538668d5bc9e3c7975434f24330009667a2` |
+| `evidence/redacted/B_id84_recheck.md` | 1KB | `45fc519617ee1b3a4ab71eec32078cd8eb05713c912d4efdfc5e464c9c53ad5b` |
+| `evidence/redacted/A_id72_recheck.md` | 1KB | `52414af195202a15198e20c6e1c2deb6d0f2af8a48117b29b33b06bc66e487a7` |
 | `evidence/redacted/package_installer_upload.log` | 5KB | `1db39bbf41cd276f9e3a95286c59d7540c44800b2777b5cc1c016e6855ef632d` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/bx.java` | 1KB | `4d165800e98482a183d54762dfdfef914c7da390fcd64ec3ff4c30d634480751` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/rd2.java` | 1KB | `a05d7b544004b4bdc67e8fdf2384fe1f2d98b53d803c51edebbcbe441aa736bd` |
@@ -180,7 +182,7 @@
 
 ### 解密数据（private，不入库）
 
-- 当前 A 抓包（ID72）未找到匹配明文；旧 `private/A_decrypted_ID59.json/.csv` 有 169 个 App，不能替代 ID72 闭环
+- 当前 A 抓包 4 个 body 中 2 个与 `dmregister` ID72/ID73 匹配（各 169 项）；另 2 个未匹配，可能为 200 成功样本；旧 `private/A_decrypted_ID59.json/.csv` 也有 169 项
 - `private/R_decrypted_ID47.json/.csv`：100 条位置/基站
 - `private/A_decrypted_ID59.json/.csv`：队列明文（旧）
 - `private/report_internal.md`：含隐私数据的内部报告

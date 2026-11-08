@@ -158,27 +158,26 @@ return (isWifi && isChinaMnc) || (!isRoaming && isUnicom);
 
 | 包 | 密文字节 | 响应 | 结果 |
 |---|---|---|---|
-| B（设备信息） | 1,024 | 429 | 历史记录为解密成功；本轮未独立复核 |
+| B（设备信息） | 1,024 | 429 | **本轮重抓 1,024 字节，与队列 ID84 逐字节匹配（RegType=B）** |
 | R（信号历史） | 68,784 | 429 | **解密成功，100 条记录** |
-| A（App 清单） | 40,464 | 200 | 本次未取得匹配明文，未完成恢复；不能据此证明协议不可解密 |
-| A（App 清单） | 40,464 | **429** | 旧 ID59 明文 169 项；当前 A 抓包（ID72）未找到匹配明文，未完成逐字节闭环 |
+| A（App 清单） | 40,464 ×4 | 200/429 | **2 个 body 与当前队列 ID72/ID73 逐字节匹配（各 169 个 App）**；另 2 个未匹配，可能为 200 成功样本（不落队列） |
 
-> A 的 200 样本本次没有取得匹配明文；429 的旧 ID59 有 169 项，但当前 A 抓包未找到对应明文，不能替代正文声称的 ID72 闭环。
+> B 本轮重抓 1,024 字节（HTTP 429），与当前队列 ID84 匹配（明文 1,018 字节，RegType=B，无 AppInfo）；旧抓包对应的 ID82 不是同一条。复核证据：`evidence/redacted/B_id84_recheck.md`。
+>
+> A 抓包共 4 个 40,464 字节 body；ID72/ID73 已匹配，另 2 个未匹配。旧 ID59 也有 169 项，但当前 ID72/ID73 已足以复核 429 路径。复核证据：`evidence/redacted/A_id72_recheck.md`。
 
 R 包解密后的统计（不含具体值）：
 
 - 记录数：100
 - 跨度 55.57 小时；99 个相邻间隔中 83 个恰为 30 分钟，最短 9.4 分钟、最长 300.2 分钟
-- 基站：4 个 CID、3 个 PCI
-- WiFi：2 个 SSID
-- 经纬度：集中在约 100m × 20m 范围内
-- 行政区：单一城区
+- 基站 CID/PCI、WiFi SSID/BSSID、经纬度、行政区等字段已脱敏，不在公开报告列出
 
-A 旧 ID59 队列明文的统计（不含具体值；不代表当前抓包已解密）：
+A 包统计（当前 ID72/ID73，169 个 App；不含具体值）：
 
 - 记录数：169 个 App
 - 字段：应用名、包名、使用时长、启动次数、移动/WiFi 收发
 - 过滤：排除 `com.android*`
+- 应用名称、Top5 排行、具体使用时长/次数/流量不在公开报告列出
 - 同一时段连续请求中，服务器返回 `200` 与 `429` 混合
 
 ### 3.7 导出组件：潜在未授权调用面（静态）
@@ -561,7 +560,7 @@ SharedPreferences：
 <map>
   <string name="pref_meid">&lt;MEID&gt;</string>
   <string name="sim_iccid">&lt;ICCID，前 6 位 898602&gt;</string>
-  <string name="register_regtime">2026-10-31 12:09:53</string>
+  <string name="register_regtime">&lt;注册时间&gt;</string>
   <string name="register_sw_version">&lt;系统版本&gt;</string>
   <int name="register_dds_slot" value="0" />
   <string name="autosms_provision">true</string>

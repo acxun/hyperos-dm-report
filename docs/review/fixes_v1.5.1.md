@@ -22,7 +22,7 @@ python3 -B tools/test_pcap_tcp.py
 20/20 checks passed
 
 sha256sum -c evidence/SHA256SUMS
-110/110 entries passed
+112/112 entries passed
 
 AutoRegistration Manifest
 exact byte match to fresh JADX decode
@@ -44,9 +44,15 @@ passed
 
 R 复核只输出匹配结果与计数，不公开标识、位置或应用清单。PDF 验证是文本/版本检查，并非逐页视觉验收。原有两个未跟踪安装器脚本未改动。
 
+## 2026-11-08 23:44 补充：A/B 解密复核
+
+- A：抓包 4 个 40,464 字节 body；当前 `dmregister` 的 **ID72、ID73** 分别与其中 2 个逐字节 AES-128-ECB 匹配，各 169 个 AppInfo；另 2 个未匹配，可能为 200 成功样本。证据：`evidence/redacted/A_id72_recheck.md`。
+- B：重新触发导出 `OnBootReceiver` 的 B 路径，抓包 1,024 字节，HTTP 429；当前队列新增 **ID84**，明文 1,018 字节、`RegType=B`、无 `AppInfo`，逐字节匹配。证据：`evidence/redacted/B_id84_recheck.md`。
+- 旧 2026-11-05 20:37:59 的 B 抓包仍未匹配；但 B 类型已由新抓包复核。A 的 200 成功样本仍未匹配。
+
 ## 继续保留的缺口
 
-- 当前 A 抓包缺匹配明文，旧 ID59 的 169 项不能替代当前闭环；B 只有历史解密记录。
+- A 的 429/队列路径已由 ID72/ID73 复核；A 的 200 成功样本仍未匹配。旧 B 20:37:59 抓包仍未匹配，B 类型已由新抓包 ID84 复核。
 - 导出组件的普通第三方应用 PoC 未完成；新增 Manifest 是静态证据，不升级为实际利用成功。
 - 移动 DM 的 HTTPS 字段未解密；GuardProvider 云查字段仍为代码级，不把 DNS/SNI 当成 TLS 明文。
 - AI 视频录屏上传链路仍未真机运行验证；转储不等于运行时观测。
