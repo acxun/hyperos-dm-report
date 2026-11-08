@@ -1,7 +1,7 @@
 # 小米 HyperOS 预装运营商 DM 组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.3.2
-- 日期：2026-11-07
+- 版本：v1.3.3
+- 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
 - 说明：本文已移除全部个人隐私数据，仅保留技术事实与可复现方法
@@ -19,6 +19,7 @@
 | 系统遥测 | `com.miui.misightservice` + `/system_ext/bin/misight`(root) | Xiaomi | `event-log.cnbj1.mi-fds.com` | 活跃 |
 | 本地反诈库 | `com.miui.securitycenter` | Xiaomi | 未发现上传 | 本地写入 |
 | AI 通话防诈 | `com.miui.guardprovider` | Xiaomi | `detection-aigc.engine.miui.com` 等 | 开关关闭，未启用 |
+| 电信自动注册 | `com.xiaomi.registration` | 中国电信方向（Xiaomi 平台签名预装） | `zzhc.vnet.cn:443`（HTTPS）+ `typdm.tydevice.com:80`（HTTP） | 活跃，已注册 |
 
 主要结论：
 
@@ -27,6 +28,7 @@
 3. `DMRegService` 采集 App 清单、完整 SIM 标识、基站/WiFi、按小时流量（含路由器 MAC 与公网 IP）、蓝牙/WiFi 列表，上报开关由云端配置控制。
 4. 两套 DM 均存在 **无权限保护的导出组件**，本机任意应用可重定向上报地址或触发上报。
 5. 截屏时间、安装记录、通话记录仅写入本地反诈库，**未发现上传路径**；AI 通话防诈当前关闭。
+6. `com.xiaomi.registration` 是预装的电信终端注册组件，采集 MEID/IMEI/IMSI/ICCID/MAC/Cell ID 等标识并上报；本机在中国移动卡 + WiFi 条件下已完成注册，且存在无权限保护的导出组件。
 
 ---
 
@@ -501,6 +503,8 @@ b.fxltsbl.com:443
 m.fxltsbl.com:5683            → 117.134.71.81 (CoAP)
 auc.fxltsbl.com:443
 event-log.cnbj1.mi-fds.com:443
+zzhc.vnet.cn:443
+typdm.tydevice.com:80
 ```
 
 **包名 / 路径**
@@ -511,6 +515,7 @@ com.miui.dmregservice          /product/priv-app/RegService/RegService.apk
 com.miui.misightservice        /system_ext/app/MiSightService
 com.miui.securitycenter        /data/misc/user/0/securitycenter/fraud_detection_data.db
 com.miui.guardprovider         /product/app/MIUIGuardProvider
+com.xiaomi.registration        /product/priv-app/AutoRegistration/AutoRegistration.apk
 ```
 
 **核查命令**
@@ -534,7 +539,7 @@ adb shell ss -tnp | grep -E "18080|:443"
 evidence/
 ├── MANIFEST.md                 # 每个文件的 SHA-256
 ├── SHA256SUMS                  # 可直接 sha256sum -c 校验
-├── apk/                        # 4 个 APK（本地保留，不入库）
+├── apk/                        # 5 个 APK（本地保留，不入库）
 ├── decompiled/
 │   ├── key/                    # 48 个关键类源码（入库）
 │   └── full/                   # 完整 jadx 源码树（本地保留）
@@ -562,3 +567,357 @@ sha256sum -c evidence/SHA256SUMS
 - 取证过程未修改业务逻辑；测试用配置已恢复原值。
 - 本文已移除设备标识、SIM 标识、位置、WiFi、App 清单等个人隐私信息，仅保留技术事实。
 - 文中所述组件均为系统预装、Xiaomi 平台签名，不代表其具有恶意意图；报告关注的是采集范围、加密方式与用户可控性。
+
+---
+
+## 13. 补充发现：中国电信自动注册组件（`com.xiaomi.registration`）
+
+> 本节为 v1.3.3 补充发现，分析对象为同一台 HyperOS 3.0 设备。未对 `zzhc.vnet.cn` 做 TLS 抓包，POST body 为代码层推断；注册成功由本地配置与成功分支推断。
+
+`com.xiaomi.registration` 是小米预装的电信终端注册组件。它做的事很简单：把手机和 SIM 卡的身份证发给电信服务器，确认这台设备已经入网。它**不上传 App 清单**，也**不录屏**。
+
+### 13.1 基本信息
+
+| 项 | 值 |
+|---|---|
+| 包名 | `com.xiaomi.registration` |
+| APK | `/product/priv-app/AutoRegistration/AutoRegistration.apk` |
+| 版本 | 15.1.22（versionCode 63，targetSdk 34） |
+| 签名 | Xiaomi MIUI 平台签名（`CN=MIUI, O=Xiaomi`） |
+| UID | **1001 / `android.uid.phone`**（和电话应用同一个系统身份） |
+| 运行进程 | `radio`，UID 1001 |
+| APK SHA-256 | `91f6324b07fe67cb753ac2875dd0c59f2b8cb9a43b97d92fb42b11b85f27c303` |
+| 当前状态 | 进程运行中；`RegistrationService` 活跃；12 小时闹钟已挂 |
+
+它和电话应用共用 UID，所以电话应用能用的权限，它也能用。
+
+Manifest 自己声明了 16 个权限：
+
+```
+INTERNET / ACCESS_NETWORK_STATE / CHANGE_NETWORK_STATE
+READ_PHONE_STATE / READ_PRECISE_PHONE_STATE / READ_PRIVILEGED_PHONE_STATE
+ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION / ACCESS_BACKGROUND_LOCATION
+ACCESS_WIFI_STATE / CHANGE_WIFI_STATE / LOCAL_MAC_ADDRESS
+SEND_SMS / RECEIVE_BOOT_COMPLETED / WAKE_LOCK / WRITE_SETTINGS
+```
+
+因为共用电话 UID，它还继承了：
+
+```
+READ_SMS / RECEIVE_SMS / READ_CALL_LOG / WRITE_CALL_LOG / CALL_PHONE
+CAMERA / WRITE_CONTACTS / READ_EXTERNAL_STORAGE / BLUETOOTH_CONNECT 等
+```
+
+代码里实际用到的敏感 API 只有这些：
+
+- `getImeiForSlot` / `getMeid`：IMEI、MEID
+- `getSubscriberId`：IMSI
+- `getIccId`：ICCID
+- `WifiManager.getConnectionInfo`：WiFi MAC / BSSID
+- `CellInfo`：Cell ID / TAC
+- `SmsManager.sendDataMessage`：向 `10659401` 发二进制短信
+- `ConnectivityManager`：IP / 网络类型
+
+**没有发现**读取短信收件箱、通话记录、联系人或相机的代码。
+
+### 13.2 它拿什么、发到哪
+
+它有三条路径。
+
+#### 路径 A：`zzhc.vnet.cn`（本机实际走这条）
+
+源码：
+
+```
+i1/p.java          Qualcomm 注册跟踪器
+RegistrationJobService.java
+i1/g.java          → z.f
+i1/l.java          按 post_params.xml 收集字段
+i1/m.java          case 0
+```
+
+请求：
+
+```http
+POST https://zzhc.vnet.cn
+Content-Type: application/encrypted-json
+
+<Base64(JSON)>
+```
+
+这里要说明两点：
+
+- **传输是 HTTPS**，链路上有加密，不是明文；
+- **内容是 Base64**，只是把 JSON 转成文本，不是加密。Header 写 `encrypted-json`，但代码里没有 AES/RSA。
+
+响应里 `resultCode == "0"` 视为注册成功。
+
+#### 路径 B：`typdm.tydevice.com`（本机没走）
+
+源码：
+
+```
+j1/c.java          CTEI 注册跟踪器
+j1/b.java          → i1/m(1)
+i1/m.java          case 1
+```
+
+请求：
+
+```http
+GET http://typdm.tydevice.com?jsonstr=<URL编码 JSON>
+```
+
+这条是 **HTTP 明文**，而且 JSON 直接放在 URL 里，代理、CDN、access log 都能看到。
+
+发送字段：
+
+```
+VER / CTEI / MAC / IP / UPLINKMAC / LINK / FWVER / DATE
+```
+
+这条路径不是所有机型都走。代码里有一个开关：
+
+```java
+boolean z2 =
+    (e.c("ro.radio.noril") && !TextUtils.isEmpty(e.g("ro.ril.oem.ctei", "")))
+    || d.d();
+
+if (z2) {
+    // 走 j1 / typdm.tydevice.com
+} else {
+    // 走 p / zzhc.vnet.cn
+}
+```
+
+`k1.d.d()` 的判断是：
+
+```java
+return ("ruan".equals(Build.DEVICE)
+        || "koto".equals(Build.DEVICE)
+        || "organ".equals(Build.DEVICE))
+       && !Build.IS_CT_CUSTOMIZATION;
+```
+
+`k1.d` 是代码里的 `AutoReg_Utils` 工具类（日志 tag 为 `AutoReg_Utils`）。`d()` 不是安全校验，而是一个**写死的机型白名单**：只有 `ruan`、`koto`、`organ` 三款平板，且不是电信定制版时，才返回 true。它的作用是决定 `RegistrationService` 走哪条注册路径：返回 true 走 `j1` / `typdm`（CTEI），返回 false 走 `p` / `zzhc`（Qualcomm）。
+
+`Build.IS_CT_CUSTOMIZATION` 是“电信定制版”标志；取反表示这个兜底分支只给非电信定制版用。
+
+翻译成普通话：
+
+| 条件 | 意思 |
+|---|---|
+| `ro.radio.noril=true` 且 `ro.ril.oem.ctei` 非空 | 设备没有常规蜂窝 radio，但 OEM 写了 CTEI（电信终端标识） |
+| `ruan` / `koto` / `organ`，且不是电信定制版 | 下面三款红米平板 |
+
+代号对照：
+
+| 代号 | 机型 |
+|---|---|
+| `ruan` | Redmi Pad Pro 5G / POCO Pad 5G |
+| `koto` | Redmi Pad 2 4G |
+| `organ` | Redmi Pad 2 Pro 5G |
+
+本机不是上述三款平板。`ro.radio.noril` 与 `ro.ril.oem.ctei` 均为空，`Build.DEVICE` 也不在 `ruan` / `koto` / `organ` 中，所以 `z2 = false`，走路径 A。
+
+#### 路径 C：短信 `10659401`（本机没走）
+
+源码：
+
+```
+i1/j.java          tryToRegister()
+i1/q.java          q.b(String)
+i1/w.java          SmsManager.sendDataMessage
+```
+
+短信内容：
+
+```xml
+<a><b>型号</b><c>IMEI1</c><d>IMEI2</d><e>IMSI</e><f>系统版本</f><g>卡槽/网络</g></a>
+```
+
+前面加 4 字节头 `{0x04, 0x03, length, 0x00}`，通过 `sendDataMessage("10659401", ...)` 发送。
+
+这条不是加密，运营商 SMSC 可读。门槛是 ICCID 以 `898603`、`898611`、`898612` 开头，也就是电信卡。本机是移动卡 `898602…`，所以没发。
+
+### 13.3 采集字段
+
+`res/xml/post_params.xml` 定义了路径 A 的字段：
+
+```
+REGVER / MEID / MODEL / SWVER
+SIM1CDMAIMSI / SIM2CDMAIMSI / UETYPE
+SIM1ICCID / SIM2ICCID
+SIM1LTEIMSI / SIM2LTEIMSI
+MACID / OSVER / REGDATE
+IMEI1 / IMEI2 / DATASIM
+RAM / ROM
+SIM1CELLID / SIM2CELLID
+FIVEGSW1 / FIVEGSW2
+NWTYPE1 / NWTYPE2 / ACCESSTYPE / 5GRCSSW
+SSW1 / SSW2
+CARD1TYPE / CARD2TYPE
+POWER
+TAC1 / TAC2
+```
+
+路径 B 额外发送：
+
+```
+VER / CTEI / MAC / IP / UPLINKMAC / LINK / FWVER / DATE
+```
+
+路径 C 发送：
+
+```
+型号 / IMEI1 / IMEI2 / IMSI / 系统版本 / 卡槽与网络状态
+```
+
+合起来就是：**设备身份证 + SIM 身份证 + 网络位置 + 手机画像**。
+
+### 13.4 什么时候触发
+
+| 触发源 | 说明 |
+|---|---|
+| `BOOT_COMPLETED` / `LOCKED_BOOT_COMPLETED` | 开机启动 |
+| `PROVISION_COMPLETE` | 开机设置完成 |
+| `SIM_STATE_CHANGED` | 换卡 / 卡就绪 |
+| `CONNECTIVITY_CHANGE` / `SERVICE_STATE` | 网络或服务状态变化 |
+| `AUTO_REGISTRATION_PERIOD_TRIGGER` | 每 12 小时 |
+| `SMS_AUTO_REGISTRATION_PERIOD_TRIGGER` | 每 12 小时 |
+| `*#*#9999#*#*` | Secret Code |
+| WiFi | 非电信卡 + WiFi 仍允许路径 A 注册 |
+
+### 13.5 本机实际状态
+
+进程：
+
+```
+radio 4460 ... com.xiaomi.registration
+```
+
+服务：
+
+```
+com.xiaomi.registration/.autoregistration.RegistrationService
+```
+
+闹钟：
+
+```
+*walarm*:miui.intent.action.SMS_AUTO_REGISTRATION_PERIOD_TRIGGER  (12h)
+*walarm*:com.qualcomm.qti.action.AUTO_REGISTRATION_PERIOD_TRIGGER (12h)
+```
+
+SharedPreferences：
+
+```xml
+<map>
+  <string name="pref_meid">&lt;MEID&gt;</string>
+  <string name="sim_iccid">&lt;ICCID，前 6 位 898602&gt;</string>
+  <string name="register_regtime">2026-10-31 12:09:53</string>
+  <string name="register_sw_version">&lt;系统版本&gt;</string>
+  <int name="register_dds_slot" value="0" />
+  <string name="autosms_provision">true</string>
+</map>
+```
+
+Logcat：
+
+```
+AutoReg_RegistrationTracker: receive ACTION_SERVICE_STATE_CHANGED, service state:0
+AutoReg_RegistrationTracker: Try to register since non-FiveG service change
+AutoReg_RegistrationTracker: sim isChanged = false
+```
+
+由此可以判断：
+
+- `register_regtime` 有值，说明注册成功过；
+- 同时存在 `register_dds_slot` / `register_sw_version`，与 `AutoRegReceiver` 的成功分支一致，对应路径 A；
+- `sim_iccid` 前 6 位是 `898602`，中国移动；
+- 所以本机是**移动卡 + WiFi** 完成电信方向注册的。
+
+### 13.6 问题在哪
+
+| # | 问题 | 说明 |
+|---|---|---|
+| 1 | **跨运营商** | WiFi 下非电信卡也会向 `zzhc.vnet.cn` 注册 |
+| 2 | **持久标识** | IMEI/MEID 不随卡变，IMSI/ICCID 随卡变，可跨卡追踪设备 |
+| 3 | **位置推断** | Cell ID/TAC + BSSID 可推断粗略位置 |
+| 4 | **权限很大** | 和电话应用共用 UID，继承短信、通话记录、相机、联系人等权限 |
+| 5 | **入口开放** | `AutoRegReceiver` / `RegistrationService` 对其他 App 开放，没有权限检查 |
+| 6 | **明文 HTTP** | 路径 B 在满足条件的机型上明文发送 MAC/IP/BSSID/CTEI |
+| 7 | **Base64 冒充加密** | Header 写 `encrypted-json`，实际只是 Base64 |
+| 8 | **无用户开关** | 没有设置项、通知或授权界面 |
+
+### 13.7 它不是什么
+
+- 不上传 App 清单。那是 `com.mobiletools.systemhelper` 干的。
+- 不录屏。那是 `com.miui.guardprovider` 的事。
+- 不读短信内容、通话记录、联系人、相机。
+- 没有远程控制通道。
+- 不是通用后门。
+
+### 13.8 局限性
+
+1. 没对 `zzhc.vnet.cn` 做 TLS 抓包，POST body 是**代码层推断**，未逐字节确认。
+2. “注册成功”由 `register_regtime` 与成功分支推断，未捕获服务器响应。
+3. 路径 B 本机机型不满足，未实际触发。
+4. 路径 C 要求电信卡，本机是移动卡，未实际发送。
+5. 结论基于单台设备、单版本（15.1.22）。
+6. 未评估禁用后对电信 VoLTE/5G/IMS 的影响。
+
+### 13.9 建议
+
+**用户侧（可逆）**
+
+```bash
+# 不用电信卡时，可考虑禁用；可能影响电信 VoLTE/5G/IMS，需测试
+adb shell pm disable-user --user 0 com.xiaomi.registration
+```
+
+或者保留组件，封堵域名：
+
+```
+zzhc.vnet.cn
+typdm.tydevice.com
+```
+
+**厂商/运营商侧**
+
+- 路径 B 改为 HTTPS。
+- 给 `AutoRegReceiver` / `RegistrationService` 加签名权限或调用方校验。
+- 非电信卡场景明确提示或停止注册。
+- 提供用户可见开关、数据清单和删除入口。
+- 说明注册数据的用途、保留期限和共享范围。
+
+### 13.10 证据路径
+
+```
+/product/priv-app/AutoRegistration/AutoRegistration.apk
+
+/data/user_de/0/com.xiaomi.registration/shared_prefs/
+    com.xiaomi.registration_preferences.xml
+
+# 反编译（本地）
+i1/p.java
+i1/j.java
+i1/q.java
+i1/w.java
+i1/l.java
+i1/m.java
+j1/b.java
+j1/c.java
+k1/a.java
+k1/c.java
+k1/d.java
+com/xiaomi/registration/autoregistration/AutoRegReceiver.java
+com/xiaomi/registration/autoregistration/RegistrationService.java
+com/xiaomi/registration/autoregistration/RegistrationJobService.java
+
+# 资源
+res/xml/post_params.xml
+res/xml/post_params_pad.xml
+res/xml/post_params_satellite.xml
+AndroidManifest.xml
+```

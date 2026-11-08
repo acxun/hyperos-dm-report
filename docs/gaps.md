@@ -50,7 +50,7 @@
 
 ### 8. APK 与证书的哈希清单不完整
 
-- 现状：已计算 4 个 APK 与 `pub.cer` 的 SHA-256（见 `iocs.md`）。
+- 现状：已计算 5 个 APK 与 `pub.cer` 的 SHA-256（见 `iocs.md`）。
 - 补法：补充各 split APK、oat/vdex、证书链、签名方案（v2/v3）详情。
 
 ### 9. 未验证导出组件的实际可利用性

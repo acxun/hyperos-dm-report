@@ -9,6 +9,7 @@
 
 | 文件 | 大小 | SHA-256 |
 |---|---|---|
+| `evidence/apk/AutoRegistration.apk` | 2MB | `91f6324b07fe67cb753ac2875dd0c59f2b8cb9a43b97d92fb42b11b85f27c303` |
 | `evidence/apk/MIUIGuardProvider.apk` | 19MB | `7b5a26b38cf3f3c1967cd8e6ed06d3d1ac0ff45371037c16e7982e9925f510c3` |
 | `evidence/apk/RegService.apk` | 2MB | `6e3ff72e078a4dca54600f69bbc43ce165503ff23c62d2ef0abdcdca5acbadcc` |
 | `evidence/apk/SecurityCenter.apk` | 70MB | `f4eda1b7b0f46521c93ddc75f7d833aec7bd48674c561e545f2b84a1edd6284c` |
