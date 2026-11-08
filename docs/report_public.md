@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.4.0
+- 版本：v1.4.1
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -813,7 +813,7 @@ content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app
 
 ### 9.6 风险应用实测：发现风险与单次安装授权
 
-除合成测试包外，本次还用一个已被本机 Avl 引擎标记的第三方应用（下称“风险样本 A”，应用名/包名脱敏）完整走了一遍安装前流程。
+除合成测试包外，本次还用一个已被本机 Avl 引擎标记的第三方应用（下称“风险样本 A”，应用名/包名脱敏）完整走了一遍安装流程（含单次安装授权）。
 
 **云端配置与未备案提示**
 
@@ -864,15 +864,27 @@ doVirusCheckNew: finished, code=0, hasResult=true
 继续 / 取消安装
 ```
 
-这说明高风险应用不是“点一次继续”就能安装，而是要求用户在系统菜单中做一次“单次安装授权”，再由系统进行身份验证。安装器的“设置 → 应用安全验证”页也写明：**待安装的应用未经小米应用商店审核时，授权并验证身份后方可继续安装**；验证方式包括小米账号密码、锁屏密码、指纹、人脸。本机未设置锁屏/指纹/人脸，测试停在授权前，未能完成最终安装；这本身是一个限制。
+这说明高风险应用不是“点一次继续”就能安装，而是要求用户在系统菜单中做一次“单次安装授权”，再由系统进行身份验证。安装器的“设置 → 应用安全验证”页也写明：**待安装的应用未经小米应用商店审核时，授权并验证身份后方可继续安装**；验证方式包括小米账号密码、锁屏密码、指纹、人脸。本次由用户在真机上完成单次安装授权与身份验证，安装成功；具体菜单和验证方式可能因 HyperOS 版本而异。
 
 **取消仍上传元数据**
 
 在风险提示页取消后，安装器仍向 `/avl/upload` 发送 `installCnt=0`，HTTP 200。字段结构与干净样本相同：包名、应用名、版本、APK MD5、签名 MD5、APK 大小、全部权限（25 项）、安装来源、渠道 MD5、点击计数。请求中**没有**威胁名、扫描结果、`cToken`、`cOffset`、`cSize` 或 `tInfo`。
 
+**授权完成后的安装成功**
+
+用户在真机上完成“单次安装授权”和身份验证后，安装成功：
+
+```text
+I/MIUIPI_InstallProgress: installCompleted
+D/MIUIPI_NetUtil: jsonBodyStr : {"installCnt":"1","packageName":"<包名>", ...}
+D/MIUIPI_NetUtil: request result : {"data":"succ","code":200,"msg":"succ"}
+```
+
+`lastUpdateTime` 更新为 `2026-11-08 21:54:11`。`/avl/upload` 的 `installCnt=1`，字段结构与取消时相同：包名、应用名、版本、APK MD5、签名 MD5、大小、25 项权限、来源、渠道 MD5、点击计数。请求中仍未出现 `cToken`/`cOffset`/`cSize`/`tInfo`。
+
 **未触发威胁报告**
 
-GuardProvider 的 `files/upload` 目录为空，未生成 `ReportStore` 待上报文件，也未抓到 `/virus/localResult/report`。因此“本地 Avl 一级命中 → 威胁报告”在本机没有发生；该路径只能按代码级记录。安装器的 OneTrack 分析事件中出现 `request_result=virus`、`risk_app_type=9999`、`app_local_scene=virus_engine`，但这是分析埋点，不等于威胁报告。
+安装成功后再次检查，GuardProvider 的 `files/upload` 目录仍为空，未生成 `ReportStore` 待上报文件，也未抓到 `/virus/localResult/report`。因此“本地 Avl 一级命中 → 威胁报告”在本机没有发生；该路径只能按代码级记录。安装器的 OneTrack 分析事件中出现 `request_result=virus`、`risk_app_type=9999`、`app_local_scene=virus_engine`，但这是分析埋点，不等于威胁报告。
 
 **风险页广告**
 
@@ -885,12 +897,12 @@ GuardProvider 的 `files/upload` 目录为空，未生成 `ReportStore` 待上�
 - 设备：HyperOS 3.0.306.0.WOOCNXM / Android 16；
 - 干净样本：开源 FuseFixer 重打包，包名 `com.example.pkgtest`，debug v2 签名，无恶意代码；
 - 风险样本：一个已被本机 Avl 标记的第三方应用（脱敏）；
-- 操作：打开安装界面 → 安装/取消；风险样本走完风险提示并在取消时抓包；
+- 操作：打开安装界面 → 安装/取消；风险样本分别走“风险页取消”和“单次安装授权后安装成功”两条路径；
 - 取证：`logcat` + `tcpdump -i any` + GuardProvider 数据库。
 
 实测结果：
 
-- `/avl/upload`：干净样本安装成功 `installCnt=1`、取消 `installCnt=0`；风险样本在风险提示页取消，`installCnt=0`，均返回 200；
+- `/avl/upload`：干净样本安装成功 `installCnt=1`、取消 `installCnt=0`；风险样本在风险提示页取消，`installCnt=0`；完成单次安装授权后安装成功，`installCnt=1`，均返回 200；
 - `/info/layout/v2`、`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`：打开安装界面即发出，参数含包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型等；
 - `/v4/game/interceptcheck/safemode`：风险样本请求体 1983 字节，含 `apkMd5`、`apkSignature*`、`apkSignatureSha1/Sha256`、`antifraudLabel`、`cdMd5`、`source` 等；
 - `VirusScanManagerService`：干净样本 `code=0, hasResult=false`；风险样本 `threat detected - level=1, name=Risk/Android.R_Cont.Porn, engine=Avl, forbidden=false`，`hasResult=true`；
@@ -900,7 +912,7 @@ GuardProvider 的 `files/upload` 目录为空，未生成 `ReportStore` 待上�
 - 本地 Avl 一级命中未生成 `ReportStore` 待上报文件，未抓到 `/virus/localResult/report`；
 - `cToken`/`tInfo` 未触发（云端未下发 `cFlag/tFlag`）；
 - `adb install` / `pm install` 路径未覆盖；
-- 本机未设置锁屏/指纹/人脸，风险样本的“单次安装授权”未完成，最终安装未验证。
+- 单次安装授权的具体菜单和验证方式由 HyperOS 版本决定；本次在真机上完成，未覆盖小米账号密码/人脸等其他验证方式。
 
 结论分级：
 
@@ -908,11 +920,12 @@ GuardProvider 的 `files/upload` 目录为空，未生成 `ReportStore` 待上�
 |---|---|
 | 安装/取消都会上传安装元数据 | 实测（logcat + pcap） |
 | 风险应用取消也上传元数据 | 实测（logcat + HTTP 200） |
+| 风险应用授权后安装成功仍上传元数据 | 实测（installCnt=1 + lastUpdateTime） |
 | 打开安装界面即上传包名/设备信息 | 实测（logcat） |
 | per-app 云控请求与响应 | 实测（logcat + HTTP 200） |
 | GuardProvider 云查 | 实测（服务日志 + pcap DNS/SNI） |
 | 本地 Avl 命中与风险 UI | 实测（logcat + UI + 数据库） |
-| 单次安装授权门槛 | 实测（UI；未完成授权） |
+| 单次安装授权门槛 | 实测（授权完成并安装成功） |
 | 云端可要求 APK 加密片段/TLSH | 代码 |
 | 云端命中后的威胁报告 | 代码（本地命中未触发） |
 | 本地反诈写入 | 代码/本地语义 |
@@ -968,9 +981,9 @@ com/miui/guardprovider/sdk/android/work/ReportWorker.java
 日志与抓包：
 
 - 请求：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/avl/upload`、`/risk/scan`；
-- `logcat` 标签：`MIUIPI_NetUtil`、`MIUIPI_InstallDataReporter`、`MIUIPI_NewInstallerPrepareActivity`、`MIUIPI_NewVirusScanner`、`VirusScanManagerService`、`CloudScanner`、`RealScanner`；
+- `logcat` 标签：`MIUIPI_NetUtil`、`MIUIPI_InstallDataReporter`、`MIUIPI_NewInstallerPrepareActivity`、`MIUIPI_NewVirusScanner`、`VirusScanManagerService`、`CloudScanner`、`RealScanner`、`MIUIPI_InstallProgress`；
 - 脱敏日志：`evidence/redacted/package_installer_upload.log`；
-- 原始 pcap 仅在本地 `private/pcap/`，不入库（干净样本 `package_installer_install6.pcap` / `package_installer_baseline7.pcap`，风险样本 `package_installer_risk.pcap`）；
+- 原始 pcap 仅在本地 `private/pcap/`，不入库（干净样本 `package_installer_install6.pcap` / `package_installer_baseline7.pcap`，风险样本取消 `package_installer_risk.pcap`，风险样本安装成功 `package_installer_risk_install.pcap`）；
 - 关键类源码见 `evidence/decompiled/key/PackageInstaller/` 与 `evidence/decompiled/key/MIUIGuardProvider/`。
 
 本次测试已移除 OAID、会话 ID、设备型号等标识；测试 APK 已卸载，调试开关已删除；风险样本的名称、包名、哈希与版本在公开证据中脱敏。
@@ -1130,4 +1143,4 @@ sha256sum -c evidence/SHA256SUMS
 - 取证过程未修改业务逻辑；测试用配置已恢复原值。
 - 本文已移除设备标识、SIM 标识、位置、WiFi、App 清单等个人隐私信息，仅保留技术事实。
 - 文中所述组件均为系统预装、Xiaomi 平台签名，不代表其具有恶意意图；报告关注的是采集范围、加密方式与用户可控性。
-- 包管理器部分基于单台设备、多次安装/取消测试；未使用真实诈骗样本，但使用了一个被 Avl 标记的色情风险样本；该样本的“单次安装授权”因本机未设置锁屏/指纹/人脸而未完成，最终安装未验证；`/virus/localResult/report` 未触发；`cToken/tInfo` 未触发；`adb install` / `pm install` 路径未覆盖。
+- 包管理器部分基于单台设备、多次安装/取消测试；未使用真实诈骗样本，但使用了一个被 Avl 标记的色情风险样本；用户在真机上完成“单次安装授权”后安装成功，`/avl/upload` 为 `installCnt=1`；`/virus/localResult/report` 未触发；`cToken/tInfo` 未触发；`adb install` / `pm install` 路径未覆盖。

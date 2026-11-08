@@ -172,14 +172,37 @@ D/MIUIPI_NetUtil: request result  : {"data":"succ","code":200,"msg":"succ"}
 
 未出现 `cToken`/`cOffset`/`cSize`/`tInfo`。
 
-### 7.5 未触发威胁报告
+### 7.5 单次安装授权完成后的安装成功
+
+用户在真机上完成“单次安装授权”和身份验证后，安装成功：
+
+```text
+I/MIUIPI_InstallProgress: installCompleted
+D/MIUIPI_NetUtil: request start : https://api.installer.xiaomi.com/avl/upload
+D/MIUIPI_NetUtil: jsonBodyStr : {"installCnt":"1","permission":"<25 项权限>","installTime":"<ts>","apkHash":"<APK MD5>","appSourcepackageName":"com.android.fileexplorer","versionName":"<版本名>","versionCode":"<版本号>","name":"<REDACTED>","fingerprint":"<签名 MD5>","packageName":"<REDACTED>","apkSize":"<字节数>","touchInstallCnt":"1","cdMd5":"<渠道摘要>","appSourceValue":"文件管理"}
+D/MIUIPI_NetUtil:  post body : {"installCnt":"1", ... }
+D/MIUIPI_NetUtil:  responseCode :  200
+D/MIUIPI_NetUtil: request result  : {"data":"succ","code":200,"msg":"succ"}
+D/MIUIPI_InstallDataReporter: report result: {"data":"succ","code":200,"msg":"succ"}
+```
+
+安装后的包状态：
+
+```text
+lastUpdateTime=2026-11-08 21:54:11
+firstInstallTime=2026-11-08 21:54:11
+```
+
+请求中未出现 `cToken`/`cOffset`/`cSize`/`tInfo`。
+
+### 7.6 未触发威胁报告
 
 ```text
 $ ls /data/data/com.miui.guardprovider/files/upload
 （空）
 ```
 
-未观察到 `/virus/localResult/report` 请求；未生成 `ReportStore` 待上报文件。该本地 Avl 一级命中未进入威胁报告队列。
+安装成功后再次检查：未观察到 `/virus/localResult/report` 请求；未生成 `ReportStore` 待上报文件。该本地 Avl 一级命中未进入威胁报告队列。
 
 > 应用名、包名、APK 哈希、签名、版本号、渠道摘要均已脱敏；原始 pcap 仅在本地 `private/pcap/package_installer_risk.pcap`。
 
