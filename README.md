@@ -1,13 +1,14 @@
-# HyperOS 预装运营商 DM 组件调查报告
+# HyperOS 预装运营商组件调查报告
 
 > 对一台 Xiaomi HyperOS 3.0（Android 16）设备的静态与动态分析。
-> 记录两套运营商终端管理（DM）客户端、系统遥测组件与本地反诈数据库的行为、协议与安全问题。
+> 记录两套运营商 DM、电信终端自动注册、系统遥测、本地反诈库与 AI 通话防诈的行为、协议与安全问题。
 
+- 报告版本：v1.3.6
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
 - 公开报告：[`docs/report_public.md`](docs/report_public.md)
 - 执行摘要：[`docs/executive_summary.md`](docs/executive_summary.md)
 - PDF：[`dist/report_public.pdf`](dist/report_public.pdf) / [`dist/executive_summary.pdf`](dist/executive_summary.pdf)
-- 完整 APK + 反编译源码：[Artifacts v1.2.5](https://github.com/acxun/hyperos-dm-report/releases/tag/artifacts-v1.2.5)（Release 附件，不经 Git 历史）
+- 完整 APK + 反编译源码：[Artifacts v1.2.5](https://github.com/acxun/hyperos-dm-report/releases/tag/artifacts-v1.2.5)（Release 附件，不经 Git 历史；`AutoRegistration.apk` 为后续新增，未纳入该 Release）
 - 已知缺口：[`docs/gaps.md`](docs/gaps.md)
 - IOC 清单：[`docs/iocs.md`](docs/iocs.md)
 
@@ -19,17 +20,20 @@
 |---|---|---|---|
 | 联通 DM | `com.mobiletools.systemhelper` | `dm.wo.com.cn:18080`（HTTP） | 活跃，周期上报 |
 | 移动 DM | `com.miui.dmregservice` | `a.fxltsbl.com:443`（HTTPS）+ CoAP 5683 | 按需唤醒 |
+| 电信自动注册 | `com.xiaomi.registration` | `zzhc.vnet.cn:443`（HTTPS）+ `typdm.tydevice.com:80`（HTTP） | 活跃，已注册 |
 | 系统遥测 | `com.miui.misightservice` + `/system_ext/bin/misight`(root) | `event-log.cnbj1.mi-fds.com` | 活跃 |
 | 本地反诈库 | `com.miui.securitycenter` | 未发现上传 | 本地写入 |
 | AI 通话防诈 | `com.miui.guardprovider` | `detection-aigc.engine.miui.com` 等 | 开关关闭 |
 
 关键结论：
 
-1. `SystemHelper` 每 30 分钟采集位置/基站/WiFi，并周期上报设备标识、SIM 标识（部分打码）、经纬度（6 位小数）、行政区、基站参数、WiFi、存储信息与 App 使用清单。
+1. `SystemHelper` 每 30 分钟采集位置/基站/WiFi，并周期上报设备标识、SIM 标识（部分打码）、经纬度（最多 6 位小数）、行政区、基站参数、WiFi、存储信息与 App 使用清单。
 2. 上报链路为 **明文 HTTP + AES-128-ECB**，`key = MD5(明文)`，`sign = RSA(1024 位公钥, MD5)`。因 key 由明文派生，取得本地明文即可还原网络密文。
 3. **已实测解密**：B（1,024 B）、R（68,784 B，100 条记录）、A（40,464 B，169 个 App，429 落库样本）。
-4. 两套 DM 均存在无权限保护的导出组件，本机任意应用可重定向上报地址或触发上报。
-5. 截屏时间、安装记录、通话记录仅写入本地反诈库，未发现上传路径；AI 通话防诈当前关闭。
+4. `com.xiaomi.registration` 采集 MEID/IMEI/IMSI/ICCID/MAC/Cell ID 等标识；路径 A/B 二选一，路径 C 是 A 的子路径；本机在中国移动卡 + WiFi 下已完成注册。
+5. AI 通话防诈的视频路径为 **录 3 秒 → 上传 → 未命中隔 2 秒再录**；预装 2.5.6 与当前 3.1.4 均确认存在该循环，当前开关为 0。
+6. 两套 DM 与电信自动注册组件均存在无权限保护的导出组件，本机任意应用可触发上报或重置状态。
+7. 截屏时间、安装记录、通话记录仅写入本地反诈库，未发现上传路径。
 
 ---
 
@@ -38,8 +42,9 @@
 ```
 .
 ├── README.md
-├── LICENSE
-├── CHANGELOG.md
+├── LICENSE.md
+├── LICENSE-CCBY
+├── LICENSE-MIT
 ├── .gitignore
 ├── docs/
 │   ├── report_public.md       # 公开版报告（已脱敏）
@@ -53,17 +58,19 @@
 │   └── README.md
 ├── evidence/
 │   ├── MANIFEST.md            # 证据清单 + SHA-256
-│   ├── apk/                   # 4 个 APK（不入库）
+│   ├── SHA256SUMS             # sha256sum -c 可校验
+│   ├── apk/                   # 5 个 APK（不入库）
 │   ├── decompiled/
-│   │   ├── key/               # 关键类反编译源码（入库）
+│   │   ├── key/               # 48 个关键类反编译源码（入库）
 │   │   └── full/              # 完整源码树（不入库）
 │   ├── certificates/          # pub.cer / pub.pem / openssl 文本
 │   ├── databases/             # 仅 schema 与行数
-│   ├── pcap/                  # 原始抓包仅本地保留（不入库）
 │   └── redacted/              # 脱敏样本
 └── private/                   # 不入库（.gitignore）
     ├── report_internal.md     # 内部版（含隐私数据）
-    └── *.csv / *.json         # 原始导出
+    ├── pcap/                  # B / R / A 三次原始抓包
+    ├── A_decrypted_ID59.json / .csv
+    └── R_decrypted_ID47.json / .csv
 ```
 
 > `private/` 已被 `.gitignore` 排除，不会进入版本历史。
@@ -119,7 +126,7 @@ sign = Base64(RSA/ECB/PKCS1(pub.cer, key))
 ## 免责声明
 
 - 本报告基于单台设备、单次取证，不代表所有小米机型/系统版本。
-- 反编译代码可能因混淆存在偏差，关键结论已通过运行时数据与抓包交叉验证。
+- 反编译代码可能因混淆存在偏差；关键结论尽量通过运行时数据与抓包交叉验证，无法实测的已在正文标注。
 - 文中组件均为系统预装、Xiaomi 平台签名；报告关注采集范围、加密方式与用户可控性，不推断其主观意图。
 
 ---
