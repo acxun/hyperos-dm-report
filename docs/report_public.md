@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.4.6
+- 版本：v1.4.7
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -679,7 +679,7 @@ AndroidManifest.xml
 
 #### 9.3.1 三个时点
 
-- **打开安装界面（尚未确认）**：安装器向 `api.installer.xiaomi.com` 发送包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型，并请求 `/v3/cloud_config/query`（全局/按包配置）、`/v4/game/interceptcheck/safemode`（APK 签名/MD5/`antifraudLabel` 等）、`/info/layout/v2`（布局/广告）。
+- **打开安装界面（尚未确认）**：安装器向 `api.installer.xiaomi.com` 发送包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型，并请求 `/v3/cloud_config/query`（全局配置）、`/v4/game/interceptcheck/safemode`（按包配置，按安装模式也可能是 `normal`/`enhancemode`；含 APK 签名/MD5/`antifraudLabel` 等）、`/info/layout/v2`（布局/广告）。
 - **点“安装”或“取消”**：都向 `/avl/upload` POST JSON；`installCnt=1` 表示安装，`0` 表示取消；服务器返回 `{"data":"succ","code":200}`。也就是说，**“取消”不是无痕操作**。
 - **风险应用**：GuardProvider 的 Avl 引擎命中后，安装器显示“发现风险”和“单次安装授权”；取消和授权后安装成功都会上传上述元数据，但 `/avl/upload` 中不带威胁名或扫描结果。
 
@@ -702,7 +702,7 @@ AndroidManifest.xml
 
 #### 9.3.3 云端配置与安装决策
 
-**per-app 配置**（`/v3/cloud_config/query`）：
+**per-app 配置**（`/v4/game/interceptcheck/{normal,enhancemode,safemode}`，按安装模式选择；风险样本走 `safemode`）：
 
 | 字段 | 作用 |
 |---|---|
@@ -716,7 +716,7 @@ AndroidManifest.xml
 | `rc` | 安装频率/身份验证策略（如 24 小时内第 N 次安装要求验证） |
 | `cInfo` | APK 片段/TLSH 上传指令 |
 
-**全局配置**（同端点，实测约 44 KB）：
+**全局配置**（`/v3/cloud_config/query`，实测约 44 KB）：
 
 | 字段 | 实测内容 |
 |---|---|
