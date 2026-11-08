@@ -8,7 +8,7 @@
 - 公开报告：[`docs/report_public.md`](docs/report_public.md)
 - 执行摘要：[`docs/executive_summary.md`](docs/executive_summary.md)
 - PDF：[`dist/report_public.pdf`](dist/report_public.pdf) / [`dist/executive_summary.pdf`](dist/executive_summary.pdf)
-- 完整 APK + 反编译源码：[Artifacts v1.2.5](https://github.com/acxun/hyperos-dm-report/releases/tag/artifacts-v1.2.5)（Release 附件，不经 Git 历史；`AutoRegistration.apk` 为后续新增，未纳入该 Release）
+- 完整 APK + 反编译源码：[Artifacts v1.2.5](https://github.com/acxun/hyperos-dm-report/releases/tag/artifacts-v1.2.5)（Release 附件，不经 Git 历史；`AutoRegistration.apk` 已作为单独附件补充）
 - 已知缺口：[`docs/gaps.md`](docs/gaps.md)
 - IOC 清单：[`docs/iocs.md`](docs/iocs.md)
 
