@@ -5,6 +5,7 @@
 - 安装器：`com.miui.packageinstaller` 5.5.7.0.0-20261012（versionCode 55700）
 - GuardProvider：`com.miui.guardprovider` 3.1.4-20260902.0
 - 测试 APK：`com.example.pkgtest`（开源 FuseFixer 重打包；debug v2 签名；无恶意代码）
+- 风险样本：另取一个已被本机 Avl 引擎标记的第三方应用（应用名/包名/哈希均脱敏）
 - 说明：为读取请求体，测试时临时创建 `/data/system/package_installer_log_on`；测试后已删除。
 
 ## 1. 打开安装界面（尚未确认）
@@ -99,7 +100,90 @@ content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app
   -> pkg_name/app_name/install_finish_time/app_tag_id/version_code
 ```
 
-## 7. 复现命令（概要）
+## 7. 风险应用实测（应用名/包名已脱敏）
+
+测试对象：一个已安装的第三方应用（下称“风险样本 A”），由文件管理器打开其 APK 触发安装器。该样本被本机 Avl 引擎标记为色情风险。
+
+### 7.1 云端配置与未备案提示
+
+```text
+I/MIUIPI_InstallTask: params loaded for <REDACTED> <REDACTED>:
+I/MIUIPI_InstallTask: cp: catA=[unknown], sys=[false], aMS=[3], aMC=[3], regS=[1], regRS=[0], useRP=[true]
+D/MIUIPI_NewInstallerPrepareActivity: <REDACTED> 9999
+D/MIUIPI_HttpLoggingInterceptor: --> POST https://api.installer.xiaomi.com/v3/cloud_config/query
+D/MIUIPI_HttpLoggingInterceptor: <-- 200 https://api.installer.xiaomi.com/v3/cloud_config/query
+D/MIUIPI_HttpLoggingInterceptor: --> POST https://api.installer.xiaomi.com/v4/game/interceptcheck/safemode
+D/MIUIPI_HttpLoggingInterceptor: Content-Length: 1983
+D/MIUIPI_HttpLoggingInterceptor: <-- 200 https://api.installer.xiaomi.com/v4/game/interceptcheck/safemode (84ms)
+```
+
+安装器 UI：
+
+```text
+未查询到此应用的 ICP 备案信息
+此应用可能为境外应用、单机应用或未履行 ICP 备案手续。了解备案政策
+已完成备案的开发者可前往申诉
+继续安装 / 退出
+```
+
+### 7.2 GuardProvider 本地扫描命中
+
+```text
+W/MIUIPI_NewVirusScanner: doVirusCheckNew: threat detected - level=1, name=Risk/Android.R_Cont.Porn, engine=Avl, forbidden=false
+I/MIUIPI_NewVirusScanner: doVirusCheckNew: finished, code=0, hasResult=true
+I/VirusScanManagerService: onScanCompleted: ALL
+```
+
+GuardProvider `scan_cache.results_json`：
+
+```json
+[{"threatLevel":1,"threatName":"Risk/Android.R_Cont.Porn","threatDesc":"[色情内容]应用涉及低俗色情内容，请谨慎使用。","checkoutEngine":"Avl","flags":0}]
+```
+
+### 7.3 风险提示与单次安装授权
+
+```text
+发现风险
+安装该应用存在高风险，请谨慎安装！
+风险详情
+【高风险】包含病毒：Risk/Android.R_Cont.Porn
+[色情内容]应用涉及低俗色情内容，请谨慎使用。
+无视风险继续安装 / 取消更新
+```
+
+点击“无视风险继续安装”后：
+
+```text
+风险详情
+若您信任该应用，请前往右上角“︙ > 单次安装授权”中允许本次安装
+继续 / 取消安装
+```
+
+风险页同时展示“您可能还喜欢 / 广告”第三方应用推荐；广告资源域名在 pcap 中为 `*.a.market.xiaomi.com`。
+
+### 7.4 取消安装仍上传元数据
+
+```text
+D/MIUIPI_NetUtil: request start : https://api.installer.xiaomi.com/avl/upload
+D/MIUIPI_NetUtil: jsonBodyStr : {"installCnt":"0","permission":"<25 项权限>","installTime":"<ts>","apkHash":"<APK MD5>","appSourcepackageName":"com.android.fileexplorer","versionName":"<版本名>","versionCode":"<版本号>","name":"<REDACTED>","fingerprint":"<签名 MD5>","packageName":"<REDACTED>","apkSize":"<字节数>","touchInstallCnt":"1","cdMd5":"<渠道摘要>","appSourceValue":"文件管理"}
+D/MIUIPI_NetUtil:  responseCode :  200
+D/MIUIPI_NetUtil: request result  : {"data":"succ","code":200,"msg":"succ"}
+```
+
+未出现 `cToken`/`cOffset`/`cSize`/`tInfo`。
+
+### 7.5 未触发威胁报告
+
+```text
+$ ls /data/data/com.miui.guardprovider/files/upload
+（空）
+```
+
+未观察到 `/virus/localResult/report` 请求；未生成 `ReportStore` 待上报文件。该本地 Avl 一级命中未进入威胁报告队列。
+
+> 应用名、包名、APK 哈希、签名、版本号、渠道摘要均已脱敏；原始 pcap 仅在本地 `private/pcap/package_installer_risk.pcap`。
+
+## 8. 复现命令（概要）
 
 ```bash
 # 打开安装器并抓 logcat

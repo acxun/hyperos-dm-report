@@ -94,11 +94,12 @@
 | `evidence/decompiled/key/MIUIGuardProvider/E1/A.java` | 16KB | `d12b541318da10a3049a7a5621251ced615ba02d6114e8be76d7149b148cdac7` |
 | `evidence/decompiled/key/MIUIGuardProvider/com/miui/guardprovider/sdk/android/work/ReportWorker.java` | 11KB | `cd459fadcd8128543024ce6f235e9891e140ba5f3471a8d5ffd494af1240fd83` |
 | `evidence/decompiled/key/MIUIGuardProvider/com/miui/guardprovider/sdk/android/pojo/networkdomain/CloudScanApkInfo.java` | 7KB | `36dbc850a7e05b1fb7d039eb38186b5bd83ec2043f0b4e38e606dbe10a17893d` |
-| `evidence/redacted/package_installer_upload.log` | 5KB | `5939fde82fdc60863d3c6d2f87977a3a799cdcd44307e1c0b6e823d566282eee` |
+| `evidence/redacted/package_installer_upload.log` | 5KB | `5c9879d4e014231710825c2a48260f5880478daa50867eaa8c342241cd6c0349` |
 
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/bx.java` | 1KB | `4d165800e98482a183d54762dfdfef914c7da390fcd64ec3ff4c30d634480751` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/rd2.java` | 1KB | `a05d7b544004b4bdc67e8fdf2384fe1f2d98b53d803c51edebbcbe441aa736bd` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/ec2.java` | 12KB | `bc9407324b4880a574989c37e7459b6313b224c5a8e7e159cc026a5ab1c15daa` |
+| `evidence/decompiled/key/MIUIGuardProvider/defpackage/s82.java` | 5KB | `633049810ce75733af78d02957911e33e8d7130db63c7e09f179b9add00d4732` |
 | `evidence/decompiled/key/MIUIGuardProvider/defpackage/fx.java` | 1KB | `cdd69633b62fb735966301776fa902e2c1f0ae5149f263d905a2bb364eca3499` |
 
 ## 完整反编译树（本地保留，不入库）
