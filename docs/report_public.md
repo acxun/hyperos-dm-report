@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装运营商 DM 组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.3.5
+- 版本：v1.3.6
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -470,6 +470,27 @@ Manifest 声明 16 个权限；因共享电话 UID，实际继承 `READ_SMS`、`
 | A | `https://zzhc.vnet.cn` | HTTPS；body 为 Base64(JSON) | **是** |
 | B | `http://typdm.tydevice.com?jsonstr=...` | HTTP 明文；JSON 在 URL | 否 |
 | C | 短信 `10659401` | 二进制短信，明文 | 否 |
+
+路径 A 与 B 共用同一个选择条件，A 是 `z2 == false` 的分支：
+
+```java
+z2 = (ro.radio.noril && ro.ril.oem.ctei 非空)
+     || (Build.DEVICE in {ruan, koto, organ} && !Build.IS_CT_CUSTOMIZATION)
+
+z2 == true  → B（typdm）
+z2 == false → A（zzhc）
+```
+
+也就是说：**不是“无 RIL + CTEI”设备，也不是 `ruan`/`koto`/`organ` 三款非电信定制平板的设备，走 A。**
+
+A 的实际发送还受 `p` 的运行时条件限制：
+
+- 任一 SIM 就绪、非漫游、`device_provisioned=1`；
+- SIM ICCID 变化、周期触发、系统版本变化、5G 开关变化或默认数据卡变化；
+- 若当前是蜂窝网络且默认数据卡不是电信卡，则跳过；WiFi 下放行；
+- 满足后由 `p` 调度 `RegistrationJobService`，走 `zzhc`。
+
+路径 C 不是独立的顶层路径：它由 A 的 `p` 初始化（`p` 构造函数中创建 `j[]`）。选 B 时不会初始化 C；选 A 时 C 可与 A 的 HTTP 注册并存，但受电信卡、IMS 能力、在途注册 ID 限制。
 
 **路径 A**：`i1/p.java` → `RegistrationJobService` → `i1/l.java`（按 `post_params.xml` 收集）→ `i1/m.java` case 0。响应 `resultCode == "0"` 视为成功。Header 写 `encrypted-json`，但代码只做 Base64，没有 AES/RSA。
 
