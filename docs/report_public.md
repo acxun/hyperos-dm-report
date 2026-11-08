@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.4.2
+- 版本：v1.4.4
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -647,291 +647,35 @@ AndroidManifest.xml
 
 ---
 
-## 9. 发现七：系统包管理器安装上报（`com.miui.packageinstaller`）
+## 9. 发现七：系统包管理器安装上报
 
 ### 9.1 基本信息
 
 | 项 | 值 |
 |---|---|
 | 包名 | `com.miui.packageinstaller` |
-| 版本 | 5.5.7.0.0-20261012（versionCode 55700，targetSdk 34） |
-| APK | `/data/app/.../com.miui.packageinstaller-.../base.apk`（系统应用更新） |
-| 关联组件 | `com.miui.guardprovider` 3.1.4-20260902.0（病毒扫描/云查） |
-| 测试入口 | 文件管理器 `ACTION_VIEW` → `NewInstallerPrepareActivity` |
-
-边界：本节主要覆盖 HyperOS 安装器 UI（打开 APK、点安装、点取消）。已补测 `adb install` 与 `pm install`：两者都能成功安装，但不进入 MIUI 安装器准备界面，未触发 `/avl/upload`（`adb install` 仅启动了安装器的包变更处理进程；`pm install` 未启动安装器进程）。因此下述 UI 侧结论不适用于 shell 安装路径。
-
-### 9.2 三个时点的网络行为
-
-- **打开安装界面（用户尚未确认）**：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2` → `api.installer.xiaomi.com`；实测抓到。
-- **点“安装”或“取消安装”**：`/avl/upload` → 同上；实测抓到。
-- **安装前病毒扫描**：`/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）→ `virus-engine.sec.miui.com`；实测抓到服务日志与 DNS/SNI。
-- **云端 per-app 配置**：`riskType`、`registrationStatus`、`registrationRestrictStatus`、`installNotAllow`、`rc`、`cInfo` 等字段决定风险提示、未备案提示、是否允许安装、是否取 APK 片段；实测抓到响应生效后的 `cp:` 参数。
-- **命中威胁/黑灰名单后**：3.1.4 通过 `ReportStore` 写 `files/upload/` 并上传 `/virus/localResult/report`；2.5.6 为 WorkManager（约 2 小时）。本次本地 Avl 一级命中未生成待上报文件；仅代码路径。
-- **安装完成**：`content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app` → 本地 SecurityCenter；代码/本地。
-
-关键点：**打开安装界面就会发设备与包信息；点取消也会上传安装记录。**
-
-### 9.3 `/avl/upload`：安装与取消都上报
-
-成功安装与取消安装都会向：
-
-```text
-https://api.installer.xiaomi.com/avl/upload
-```
-
-POST 一个 JSON。实测成功安装时（测试包为合成的 `com.example.pkgtest`）：
-
-```json
-{
-  "installCnt": "1",
-  "packageName": "com.example.pkgtest",
-  "name": "FuseFixer",
-  "versionCode": "38",
-  "versionName": "3574975",
-  "apkHash": "<APK MD5>",
-  "fingerprint": "<签名摘要>",
-  "apkSize": "74594",
-  "permission": "android.permission.QUERY_ALL_PACKAGES",
-  "appSourcepackageName": "com.android.fileexplorer",
-  "appSourceValue": "文件管理",
-  "cdMd5": "<渠道摘要>",
-  "installTime": "<时间戳>",
-  "touchInstallCnt": "1"
-}
-```
-
-取消安装时，字段基本一致，只有 `installCnt` 变为 `"0"`。服务器返回：
-
-```json
-{"data":"succ","code":200,"msg":"succ"}
-```
-
-字段含义：
-
-| 字段 | 含义 |
-|---|---|
-| `packageName` / `name` | 包名 / 应用名 |
-| `versionCode` / `versionName` | 版本 |
-| `apkHash` | APK 文件 MD5 |
-| `fingerprint` | 签名摘要 |
-| `apkSize` | APK 大小 |
-| `permission` | 申请的全部权限（逗号连接） |
-| `appSourcepackageName` / `appSourceValue` | 安装来源包名 / 来源标签 |
-| `cdMd5` | 渠道包摘要 |
-| `installTime` | 安装/取消时间 |
-| `installCnt` | `1` 安装成功；`0` 取消 |
-| `touchInstallCnt` | 点击安装计数 |
-| `apkPath` | 调用方提供时附带（本次为空） |
-
-代码位置：
-
-- 端点常量：`com/android/packageinstaller/I.java`（`f12442e = f12438a + "/avl/upload"`）
-- 组装与发送：`com/miui/packageInstaller/util/a.java`（`InstallDataReporter`）
-- 调用点：`InstallProgressParentActivity`（安装结果）、`p137t2/r.java` 与 `p116q2/c.java`（取消）
-
-### 9.4 云端可控的 APK 片段与 TLSH
-
-除安装元数据外，`/avl/upload` 还具备按云端指令取 APK 内容的能力：
-
-1. 安装器向云端请求 per-app 配置，响应中的 `CloudParams.cInfo` 包含 `cFlag`、`cOffset`、`cSize`、`tFlag`。
-2. `cFlag == true` 时，安装器从 APK 读取 `[cOffset, cOffset + cSize)` 区间。
-3. 该区间用 `AES/CBC/PKCS5Padding` 加密：密钥为 `MD5(XiaoMiSafe.getKeyBytes())`，IV 为 `XiaoMiSafe.getKeyViBytes()`（均来自 `libxiaomiSafe.so`）。
-4. 密文以 Base64 写入 `cToken`，同时上传 `cOffset`、`cSize`、`cMd5`（明文区间 MD5）。
-5. `tFlag == true` 时，另外计算 APK 的 TLSH 模糊哈希，写入 `tInfo`。
-
-代码位置：
-
-- `com/miui/packageInstaller/model/CInfo.java`
-- `com/miui/packageInstaller/util/a.java`（`g` 方法中的 `cToken`/`cMd5` 分支）
-- `com/miui/packageInstaller/util/XiaoMiSafe.java`
-- `F2/e.java`（`TlshManager`，`tInfo`）
-
-需要强调：**这不是默认上传整包**。默认只上传元数据；只有云端返回 `cFlag/tFlag` 时才取片段/算 TLSH。若 `cSize` 被设为整个文件大小，等价于上传整包。该能力可用于完整性校验，但客观上也让服务器可以按需取走 APK 任意片段。
-
-### 9.5 诈骗/风险应用：GuardProvider 云查与威胁上报
-
-包管理器本身不维护诈骗名单，但它把 APK 交给 `com.miui.guardprovider` 扫描，并根据扫描结果和云端 per-app 配置决定是否显示风险提示、是否允许安装。
-
-**云端 per-app 配置**
-
-打开安装界面时，安装器向 `https://api.installer.xiaomi.com/v3/cloud_config/query` 请求该包的配置。`CloudParams` 中与风险/拦截相关的字段包括：
-
-| 字段 | 作用 |
-|---|---|
-| `riskType` | 云端风险分类；实测风险样本返回 `9999`（具体枚举未公开） |
-| `sourceRiskType` | 启动来源的风险分类 |
-| `registrationStatus` | `1=未备案`、`2=已备案`、`3=无需备案` |
-| `registrationRestrictStatus` | `1` 时直接禁止安装 |
-| `installNotAllow` | `true` 时禁止安装 |
-| `areaForbiddenInstall` | 地区禁装 |
-| `strategyLevel` | 风险策略等级 |
-| `riskWarningTip` / `riskDetailTip` / `securityTip` | 风险提示文案 |
-| `rc` | 安装频率/身份验证策略 |
-| `cInfo` | APK 片段/TLSH 上传指令 |
-
-这些字段由服务器返回，安装器只负责执行。实测风险样本的日志为 `regS=[1], regRS=[0], riskType=9999`，即“未备案但未禁止安装”，因此先显示 ICP 备案提示，再显示本地扫描风险。
-
-**云查请求**
-
-- 包管理器构造 `ScanRequestArgs.Builder(1)`（`SCAN_SCENE_PACKAGE_INSTALLER`），没有关闭云查；`ScanRequestArgs` 默认 `useCloudScan = true`。
-- GuardProvider 向 `https://virus-engine.sec.miui.com/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）发送 `CloudScanApkInfo`：
-
-| 字段 | 内容 |
-|---|---|
-| `packageName` | 包名 |
-| `versionCode` | 版本号 |
-| `apkCertificateMD5` | 证书 MD5 |
-| `apkCertificateSHA256` | 证书 SHA-256 |
-| `mfFileSHA256` | manifest 文件 SHA-256 |
-
-**威胁上报（3.1.4 的实现）**
-
-GuardProvider 3.1.4 使用 `ReportStore`：命中后把待上报 JSON 写入 `/data/data/com.miui.guardprovider/files/upload/`，再由 `rd2.a()` 上传到：
-
-```text
-https://virus-engine.sec.miui.com/virus/localResult/report
-```
-
-`ResultReportData` 字段：威胁等级、威胁名、恶意代码特征、包名、应用名、版本、证书 MD5/SHA-256、manifest SHA-256、APK MD5/SHA-256、MIUI 版本、Android 版本、设备名、UUID、`hitFiles`、客户端版本、检查时间。
-
-旧版 2.5.6 使用 WorkManager `ReportWorker`（约 2 小时延迟）；3.1.4 的 `ReportStore` 代码中未见固定 2 小时延迟，实际触发条件与云端/拦截结果有关。**本次本地 Avl 一级命中没有生成待上报文件，也没有抓到 `/virus/localResult/report` 请求**，因此该路径仍按“代码级”记录。
-
-**本地反诈写入**
-
-安装完成后，安装器还会向：
-
-```text
-content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app
-```
-
-插入 `pkg_name`、`app_name`、`install_finish_time`、`app_tag_id`、`version_code`。`app_tag_id` 来自云端三级分类；缺失时用 `-3/-2/-1`。这条记录写入本地 SecurityCenter 反诈库，未发现该 Provider 把它直接上传。
-
-**APK 清单中的反诈标签**
-
-安装器会读取 APK `<meta-data android:name="AntifraudLabel">`，并在 per-app 云控请求中以 `antifraudLabel` 字段发送。字段代码见 `com/miui/packageInstaller/C0647e.java`；读取代码见 `p095n2/c.java`。
-
-### 9.6 风险应用实测：发现风险与单次安装授权
-
-除合成测试包外，本次还用一个已被本机 Avl 引擎标记的第三方应用（下称“风险样本 A”，应用名/包名脱敏）完整走了一遍安装流程（含单次安装授权）。
-
-**云端配置与未备案提示**
-
-- 打开安装界面即发出 `/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2`；
-- 安装器日志：`cp: catA=[unknown], sys=[false], aMS=[3], aMC=[3], regS=[1], regRS=[0], useRP=[true]`；另有 `NewInstallerPrepareActivity: <包名> 9999`（代码此处输出 `cloudParams.riskType`），OneTrack 事件中为 `risk_app_type=9999`；
-- 云端把该应用标为“未备案、未禁止安装”，安装器先弹出：
-
-```text
-未查询到此应用的 ICP 备案信息
-此应用可能为境外应用、单机应用或未履行 ICP 备案手续。了解备案政策
-已完成备案的开发者可前往申诉
-继续安装 / 退出
-```
-
-**本地扫描命中**
-
-GuardProvider 的 Avl 引擎返回：
-
-```text
-doVirusCheckNew: threat detected - level=1, name=Risk/Android.R_Cont.Porn, engine=Avl, forbidden=false
-doVirusCheckNew: finished, code=0, hasResult=true
-```
-
-`scan_cache` 中的结果：
-
-```json
-[{"threatLevel":1,"threatName":"Risk/Android.R_Cont.Porn","threatDesc":"[色情内容]应用涉及低俗色情内容，请谨慎使用。","checkoutEngine":"Avl","flags":0}]
-```
-
-**风险提示与单次安装授权**
-
-安装器随后显示：
-
-```text
-发现风险
-安装该应用存在高风险，请谨慎安装！
-风险详情
-【高风险】包含病毒：Risk/Android.R_Cont.Porn
-[色情内容]应用涉及低俗色情内容，请谨慎使用。
-无视风险继续安装 / 取消更新
-```
-
-点击“无视风险继续安装”后，又弹出：
-
-```text
-风险详情
-若您信任该应用，请前往右上角“︙ > 单次安装授权”中允许本次安装
-继续 / 取消安装
-```
-
-这说明高风险应用不是“点一次继续”就能安装，而是要求用户在系统菜单中做一次“单次安装授权”，再由系统进行身份验证。安装器的“设置 → 应用安全验证”页也写明：**待安装的应用未经小米应用商店审核时，授权并验证身份后方可继续安装**；验证方式包括小米账号密码、锁屏密码、指纹、人脸。本次由用户在真机上完成单次安装授权与身份验证，安装成功；具体菜单和验证方式可能因 HyperOS 版本而异。
-
-**取消仍上传元数据**
-
-在风险提示页取消后，安装器仍向 `/avl/upload` 发送 `installCnt=0`，HTTP 200。字段结构与干净样本相同：包名、应用名、版本、APK MD5、签名 MD5、APK 大小、全部权限（25 项）、安装来源、渠道 MD5、点击计数。请求中**没有**威胁名、扫描结果、`cToken`、`cOffset`、`cSize` 或 `tInfo`。
-
-**授权完成后的安装成功**
-
-用户在真机上完成“单次安装授权”和身份验证后，安装成功：
-
-```text
-I/MIUIPI_InstallProgress: installCompleted
-D/MIUIPI_NetUtil: jsonBodyStr : {"installCnt":"1","packageName":"<包名>", ...}
-D/MIUIPI_NetUtil: request result : {"data":"succ","code":200,"msg":"succ"}
-```
-
-`lastUpdateTime` 更新为 `2026-11-08 21:54:11`。`/avl/upload` 的 `installCnt=1`，字段结构与取消时相同：包名、应用名、版本、APK MD5、签名 MD5、大小、25 项权限、来源、渠道 MD5、点击计数。请求中仍未出现 `cToken`/`cOffset`/`cSize`/`tInfo`。
-
-**未触发威胁报告**
-
-安装成功后再次检查，GuardProvider 的 `files/upload` 目录仍为空，未生成 `ReportStore` 待上报文件，也未抓到 `/virus/localResult/report`。因此“本地 Avl 一级命中 → 威胁报告”在本机没有发生；该路径只能按代码级记录。安装器的 OneTrack 分析事件中出现 `request_result=virus`、`risk_app_type=9999`、`app_local_scene=virus_engine`，但这是分析埋点，不等于威胁报告。
-
-**风险页广告**
-
-风险提示页下方同时展示“您可能还喜欢 / 广告”第三方应用推荐；pcap 中出现 `t1.a.market.xiaomi.com`、`t5.a.market.xiaomi.com`。安全警告与广告同屏，是一个值得记录的产品行为。
-
-### 9.7 实测与局限
-
-测试方法：
-
-- 设备：HyperOS 3.0.306.0.WOOCNXM / Android 16；
-- 干净样本：开源 FuseFixer 重打包，包名 `com.example.pkgtest`，debug v2 签名，无恶意代码；
-- 风险样本：一个已被本机 Avl 标记的第三方应用（脱敏）；
-- 操作：打开安装界面 → 安装/取消；风险样本分别走“风险页取消”和“单次安装授权后安装成功”两条路径；
-- 取证：`logcat` + `tcpdump -i any` + GuardProvider 数据库。
-
-实测结果：
-
-- `/avl/upload`：干净样本安装成功 `installCnt=1`、取消 `installCnt=0`；风险样本在风险提示页取消，`installCnt=0`；完成单次安装授权后安装成功，`installCnt=1`，均返回 200；
-- `/info/layout/v2`、`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`：打开安装界面即发出，参数含包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型等；
-- `/v4/game/interceptcheck/safemode`：风险样本请求体 1983 字节，含 `apkMd5`、`apkSignature*`、`apkSignatureSha1/Sha256`、`antifraudLabel`、`cdMd5`、`source` 等；
-- `VirusScanManagerService`：干净样本 `code=0, hasResult=false`；风险样本 `threat detected - level=1, name=Risk/Android.R_Cont.Porn, engine=Avl, forbidden=false`，`hasResult=true`；
-- 风险样本 UI：ICP 备案提示 → “发现风险” → “单次安装授权”；
-- pcap：`virus-engine.sec.miui.com` 的 DNS 查询与 TLS SNI 均出现；风险页广告域名 `*.a.market.xiaomi.com` 出现；
-- 风险样本取消后 `/avl/upload` 仍包含完整应用元数据与 25 项权限；
-- 本地 Avl 一级命中未生成 `ReportStore` 待上报文件，未抓到 `/virus/localResult/report`；
-- `cToken`/`tInfo` 未触发（云端未下发 `cFlag/tFlag`）；
-- `adb install` / `pm install`：均安装成功；未出现 `NewInstallerPrepareActivity`/`InstallStart`，未抓到 `/avl/upload`；`pm install` 未启动安装器进程；
-- 单次安装授权的具体菜单和验证方式由 HyperOS 版本决定；本次在真机上完成，未覆盖小米账号密码/人脸等其他验证方式。
-- 其他 session/企业安装路径未覆盖。
-
-结论分级：
-
-| 结论 | 证据级别 |
-|---|---|
-| 安装/取消都会上传安装元数据 | 实测（logcat + pcap） |
-| 风险应用取消也上传元数据 | 实测（logcat + HTTP 200） |
-| 风险应用授权后安装成功仍上传元数据 | 实测（installCnt=1 + lastUpdateTime） |
-| 打开安装界面即上传包名/设备信息 | 实测（logcat） |
-| per-app 云控请求与响应 | 实测（logcat + HTTP 200） |
-| GuardProvider 云查 | 实测（服务日志 + pcap DNS/SNI） |
-| 本地 Avl 命中与风险 UI | 实测（logcat + UI + 数据库） |
-| 单次安装授权门槛 | 实测（授权完成并安装成功） |
-| 云端可要求 APK 加密片段/TLSH | 代码 |
-| 云端命中后的威胁报告 | 代码（本地命中未触发） |
-| 本地反诈写入 | 代码/本地语义 |
-
-### 9.8 问题与建议
+| 版本 | 5.5.7.0.0-20261012（versionCode 55700） |
+| 关联组件 | `com.miui.guardprovider` 3.1.4-20260902.0 |
+| 入口 | 文件管理器 `ACTION_VIEW` → `NewInstallerPrepareActivity` |
+| 服务器 | `api.installer.xiaomi.com`、`virus-engine.sec.miui.com`、`*.a.market.xiaomi.com` |
+| 适用边界 | 以下结论适用于 MIUI 安装器 UI。`adb install` / `pm install` 已实测不进入该 UI，未触发 `/avl/upload` |
+
+### 9.2 结论
+
+| # | 结论 | 证据级别 |
+|---|---|---|
+| 1 | 打开安装界面即向 `api.installer.xiaomi.com` 发送包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型、APK MD5/签名等，并请求 `/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2` | 实测 |
+| 2 | 点“安装”和点“取消”都会向 `/avl/upload` 上传安装元数据：`installCnt=1/0`，字段含包名、应用名、版本、APK MD5、签名、大小、全部权限、来源、渠道 MD5 | 实测 |
+| 3 | 风险应用会被 GuardProvider 的 Avl 等引擎标记（实测 `Risk/Android.R_Cont.Porn`，level=1）；安装器显示“发现风险”，要求“单次安装授权”+身份验证；取消和授权后安装成功都会上传元数据 | 实测 |
+| 4 | 安装前 GuardProvider 云查 `/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`），字段含包名、版本、证书 MD5/SHA-256、manifest SHA-256 | 实测（服务日志 + DNS/SNI） |
+| 5 | 云端 per-app 配置返回 `riskType`、`registrationStatus`、`registrationRestrictStatus`、`installNotAllow`、`areaForbiddenInstall`、`rc`、`cInfo`，决定未备案/风险提示、禁止安装和取片指令；全局配置还含 16 条禁装规则、94 个包的离线安装白名单、`oneClick` 授权参数 | 实测（日志 + 只读响应捕获） |
+| 6 | 云端可要求上传 APK 片段/TLSH：`cInfo.cFlag` → `cToken`（AES/CBC/PKCS5，key/IV 来自 `libxiaomiSafe.so`）+ `cOffset/cSize/cMd5`；`tFlag` → TLSH `tInfo` | 代码；本次未触发 |
+| 7 | 云端威胁命中后 `/virus/localResult/report` 上报威胁名/等级、包信息、证书、APK 哈希、MIUI/Android/设备、UUID、`hitFiles`；3.1.4 用 `ReportStore` 文件队列，2.5.6 用 `ReportWorker`。本地 Avl level=1 命中未生成待上报文件 | 代码；本地命中未触发 |
+| 8 | 安装完成会向本地反诈库 `content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app` 写入 `pkg_name/app_name/install_finish_time/app_tag_id/version_code` | 代码/本地语义 |
+| 9 | `adb install` / `pm install` 安装成功，但不进入 MIUI 安装器 UI，未触发 `/avl/upload`；上述上报只覆盖 UI 路径 | 实测 |
+| 10 | 风险提示页同时展示第三方应用推荐广告，资源来自 `*.a.market.xiaomi.com` | 实测 |
+
+### 9.3 主要问题
 
 | # | 问题 |
 |---|---|
@@ -940,54 +684,35 @@ D/MIUIPI_NetUtil: request result : {"data":"succ","code":200,"msg":"succ"}
 | 3 | **字段过宽**：应用名、版本、签名、APK MD5、大小、全部权限、安装来源 |
 | 4 | **云端可控取片**：`cOffset/cSize` 由服务器决定，可读取 APK 任意区间并加密上传 |
 | 5 | **威胁报告含路径**：`hitFiles` 可能暴露用户文件路径 |
-| 6 | **无用户可见提示**：没有告知上传范围、云端取片或威胁报告 |
-| 7 | **风险提示页同屏广告**：高风险警告下方同时展示第三方应用推荐，容易分散用户对风险的注意 |
-| 8 | **风险应用取消仍上传**：在“发现风险”页取消后，仍上传包名、应用名、版本、APK MD5、签名、大小、25 项权限与来源 |
-| 9 | **分析埋点包含风险结果**：`request_result=virus`、`risk_app_type=9999` 出现在 OneTrack 分析事件中，尽管未进入威胁报告 |
+| 6 | **风险提示页同屏广告**：高风险警告下方同时展示第三方应用推荐 |
+| 7 | **无用户可见提示**：没有告知上传范围、云端取片或威胁报告 |
+| 8 | **shell 安装绕过上报**：`adb install`/`pm install` 不触发 UI 上报，说明上报绑定安装器 UI，而非安装本身 |
 
-**用户侧（可逆）**
+### 9.4 建议
 
-- 目前没有面向包管理器上报的公开开关；安装敏感 APK 时优先使用隔离环境/备用机；
-- 不要在来源不明的 APK 上直接点“安装”或“取消”，因为两者都会触发 `/avl/upload`；
-- 如使用 root 防火墙限制 `com.miui.packageinstaller` 联网，会影响云查/广告等在线功能，且未验证对安装成功率的影响，不能视为可靠缓解。
+**用户侧**
+
+- 安装敏感 APK 时优先使用隔离环境/备用机；
+- 不要在来源不明的 APK 上直接点“安装”或“取消”，两者都会触发 `/avl/upload`；
+- root 防火墙限制 `com.miui.packageinstaller` 联网会影响云查/广告等在线功能，且未验证对安装成功率的影响，不能视为可靠缓解。
 
 **厂商侧**
 
 - 取消安装时停止 `/avl/upload`；
-- 安装前以明确文案告知上传字段，并提供拒绝选项；
+- 安装前明确告知上传字段并提供拒绝选项；
 - 最小化设备标识与安装元数据；
 - APK 片段/TLSH 上传改为单独授权，默认关闭；
 - 威胁报告的 `hitFiles` 做路径脱敏；
-- 提供上报记录查看与删除入口；
 - 风险提示页不要展示广告；
-- 明确告知本地扫描结果是否进入分析埋点，并提供关闭选项。
+- 提供上报记录查看与删除入口。
 
-### 9.9 证据
+### 9.5 证据
 
-代码路径：
-
-```text
-com/android/packageinstaller/I.java
-com/miui/packageInstaller/util/a.java
-com/miui/packageInstaller/C0647e.java
-com/miui/packageInstaller/c0.java
-com/android/packageinstaller/C0609a.java
-com/miui/guardprovider/sdk/ScanRequestArgs.java
-F1/e.java                # 2.5.6 云查；3.1.4 对应 defpackage/bx.java
-F1/t.java                # 2.5.6 上报；3.1.4 对应 defpackage/rd2.java
-E1/A.java
-com/miui/guardprovider/sdk/android/work/ReportWorker.java
-```
-
-日志与抓包：
-
-- 请求：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/avl/upload`、`/risk/scan`；边界补测：`adb install` / `pm install` 未触发 `/avl/upload`；
-- `logcat` 标签：`MIUIPI_NetUtil`、`MIUIPI_InstallDataReporter`、`MIUIPI_NewInstallerPrepareActivity`、`MIUIPI_NewVirusScanner`、`VirusScanManagerService`、`CloudScanner`、`RealScanner`、`MIUIPI_InstallProgress`；
-- 脱敏日志：`evidence/redacted/package_installer_upload.log`；
-- 原始 pcap 仅在本地 `private/pcap/`，不入库（干净样本 `package_installer_install6.pcap` / `package_installer_baseline7.pcap`，风险样本取消 `package_installer_risk.pcap`，风险样本安装成功 `package_installer_risk_install.pcap`）；
-- 关键类源码见 `evidence/decompiled/key/PackageInstaller/` 与 `evidence/decompiled/key/MIUIGuardProvider/`。
-
-本次测试已移除 OAID、会话 ID、设备型号等标识；测试 APK 已卸载，调试开关已删除；风险样本的名称、包名、哈希与版本在公开证据中脱敏。
+- 代码路径：`I.java`、`util/a.java`、`C0647e.java`、`c0.java`、`C0609a.java`、`ScanRequestArgs.java`、`F1/e.java`、`F1/t.java`、`E1/A.java`、`ReportWorker.java`；3.1.4 对应 `bx.java`、`rd2.java`、`ec2.java`、`s82.java`；
+- 请求：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/avl/upload`、`/risk/scan`；
+- 日志标签：`MIUIPI_NetUtil`、`MIUIPI_InstallDataReporter`、`MIUIPI_NewVirusScanner`、`VirusScanManagerService`、`CloudScanner`、`MIUIPI_InstallProgress`；
+- 脱敏证据：`evidence/redacted/package_installer_upload.log`、`evidence/redacted/cloud_config_global_summary.md`；
+- 原始 pcap 仅在本地 `private/pcap/`；完整云控响应仅在 `private/frida/`，不入库。
 
 ## 10. 安全与合规问题
 
