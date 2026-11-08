@@ -3,7 +3,7 @@
 > 对一台 Xiaomi HyperOS 3.0（Android 16）设备的静态与动态分析。
 > 记录两套运营商 DM、电信终端自动注册、系统遥测、本地反诈库、AI 通话防诈与系统包管理器安装上报的行为、协议与安全问题。
 
-- 报告版本：v1.3.7
+- 报告版本：v1.3.8
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
 - 公开报告：[`docs/report_public.md`](docs/report_public.md)
 - 执行摘要：[`docs/executive_summary.md`](docs/executive_summary.md)
@@ -35,7 +35,7 @@
 5. AI 通话防诈的视频路径为 **录 3 秒 → 上传 → 未命中隔 2 秒再录**；预装 2.5.6 与当前 3.1.4 均确认存在该循环，当前开关为 0。
 6. 两套 DM 与电信自动注册组件均存在无权限保护的导出组件，本机任意应用可触发上报或重置状态。
 7. 截屏时间、安装记录、通话记录仅写入本地反诈库，未发现上传路径。
-8. `com.miui.packageinstaller` 打开安装界面即向 `api.installer.xiaomi.com` 发包名/设备信息；安装与取消都会向 `/avl/upload` 上传安装元数据；云端可按 `cInfo` 要求上传 APK 加密片段与 TLSH。GuardProvider 云查命中后约 2 小时上报详细威胁报告。
+8. `com.miui.packageinstaller` 打开安装界面即向 `api.installer.xiaomi.com` 发包名/设备信息；安装与取消都会向 `/avl/upload` 上传安装元数据；云端可按 `cInfo` 要求上传 APK 加密片段与 TLSH。GuardProvider 云查已实测；命中后的详细威胁报告为代码路径。
 
 ---
 

@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.3.7
+- 版本：v1.3.8
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -30,7 +30,7 @@
 4. 两套 DM 均存在 **无权限保护的导出组件**，本机任意应用可重定向上报地址或触发上报。
 5. 截屏时间、安装记录、通话记录仅写入本地反诈库，**未发现上传路径**；AI 通话防诈当前关闭。
 6. `com.xiaomi.registration` 是预装的电信终端注册组件，采集 MEID/IMEI/IMSI/ICCID/MAC/Cell ID 等标识并上报；本机在中国移动卡 + WiFi 条件下已完成注册，且存在无权限保护的导出组件。
-7. `com.miui.packageinstaller` 在打开安装界面时即向 `api.installer.xiaomi.com` 发送包名/设备信息；**安装与取消都会**向 `/avl/upload` 上传安装元数据；云端还可按 `cInfo` 要求上传 APK 加密片段与 TLSH 模糊哈希。诈骗/风险判定由 GuardProvider 云查完成，命中后约 2 小时上报详细威胁报告。
+7. `com.miui.packageinstaller` 在打开安装界面时即向 `api.installer.xiaomi.com` 发送包名/设备信息；**安装与取消都会**向 `/avl/upload` 上传安装元数据；云端还可按 `cInfo` 要求上传 APK 加密片段与 TLSH 模糊哈希。GuardProvider 云查已实测（`/risk/scan`）；命中后的详细威胁报告为代码路径。
 
 ---
 
@@ -663,9 +663,9 @@ AndroidManifest.xml
 
 ### 9.2 三个时点的网络行为
 
-- **打开安装界面（用户尚未确认）**：`/v3/cloud_config/query`、`/info/layout/v2` → `api.installer.xiaomi.com`；实测抓到。
+- **打开安装界面（用户尚未确认）**：`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2` → `api.installer.xiaomi.com`；实测抓到。
 - **点“安装”或“取消安装”**：`/avl/upload` → 同上；实测抓到。
-- **安装前病毒扫描**：`/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）→ `virus-engine.sec.miui.com`；本次扫描超时。
+- **安装前病毒扫描**：`/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）→ `virus-engine.sec.miui.com`；实测抓到服务日志与 DNS/SNI。
 - **命中威胁/黑灰名单后约 2 小时**：`/virus/localResult/report` → 同上；仅代码路径。
 - **安装完成**：`content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app` → 本地 SecurityCenter；代码/本地。
 
@@ -796,27 +796,31 @@ content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app
 - 设备：HyperOS 3.0.306.0.WOOCNXM / Android 16；
 - 测试 APK：开源 FuseFixer 重打包，包名 `com.example.pkgtest`，debug v2 签名，无恶意代码；
 - 操作：打开安装界面 → 安装一次；再次打开 → 取消一次；
-- 取证：`logcat` + `tcpdump -i any`；
-- 为拿到请求体，临时启用安装器的 `package_installer_log_on` 调试开关，测试后删除。
+- 取证：`logcat` + `tcpdump -i any`。
 
 实测结果：
 
 - `/avl/upload`：安装成功 `installCnt=1`、取消 `installCnt=0`，均返回 200；
 - `/info/layout/v2`、`/v3/cloud_config/query`：打开安装界面即发出，参数含包名、应用名、安装来源、OAID、机型、区域、系统版本、网络类型等；
-- pcap 中没有 `virus-engine.sec.miui.com` 的 DNS/SNI；
-- 安装器日志出现 `virus scan timeout`，本次未完成 GuardProvider 云查；
-- 本次未捕获到 per-app 云控请求的 URL；日志中的 `cp` 为 `catA=[null], sys=[true]`，未触发 `cToken`/`tInfo`；
-- 未使用真实诈骗样本，`/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）与 `/virus/localResult/report` 为代码级证据。
+- `/v4/game/interceptcheck/safemode`：打开安装界面时发出，HTTP 200；请求体约 1.9 KB，含 `packageName`、`apkMd5`、`apkSignature*`、`antifraudLabel`、`cdMd5`、`source` 等；
+- `VirusScanManagerService`：日志出现 `ScanTask[scene=1,useCloudScan=true,...]`，随后 `CloudScanner: Scanning...`；
+- pcap：`virus-engine.sec.miui.com` 的 DNS 查询与 TLS SNI 均出现；
+- 安装器日志中的 per-app 云控参数为 `catA=[unknown], sys=[false], aMS=[3], aMC=[3], regS=[1], regRS=[0], useRP=[true]`，说明云控响应已生效；
+- 未使用真实诈骗样本，`/virus/localResult/report` 为代码级证据；
+- `cToken`/`tInfo` 未触发（云端未下发 `cFlag/tFlag`）；
+- `adb install` / `pm install` 路径未覆盖。
 
-因此，本节把结论分为两级：
+结论分级：
 
 | 结论 | 证据级别 |
 |---|---|
 | 安装/取消都会上传安装元数据 | 实测（logcat + pcap） |
 | 打开安装界面即上传包名/设备信息 | 实测（logcat） |
+| per-app 云控请求与响应 | 实测（logcat + HTTP 200） |
+| GuardProvider 云查 | 实测（服务日志 + pcap DNS/SNI） |
 | 云端可要求 APK 加密片段/TLSH | 代码 |
-| GuardProvider 云查与威胁上报 | 代码；本次因扫描超时未跑通 |
-| 本地反诈写入 | 代码；本地语义 |
+| 命中后的威胁报告 | 代码（无命中样本） |
+| 本地反诈写入 | 代码/本地语义 |
 
 ### 9.7 问题与建议
 
@@ -863,7 +867,8 @@ com/miui/guardprovider/sdk/android/work/ReportWorker.java
 
 日志与抓包：
 
-- `logcat` 标签：`MIUIPI_NetUtil`、`MIUIPI_InstallDataReporter`、`MIUIPI_NewInstallerPrepareActivity`；
+- 请求：`/v4/game/interceptcheck/safemode`、`/avl/upload`、`/risk/scan`；
+- `logcat` 标签：`MIUIPI_NetUtil`、`MIUIPI_InstallDataReporter`、`MIUIPI_NewInstallerPrepareActivity`、`VirusScanManagerService`、`CloudScanner`；
 - 脱敏日志：`evidence/redacted/package_installer_upload.log`；
 - 原始 pcap 仅在本地 `private/pcap/`，不入库；
 - 关键类源码见 `evidence/decompiled/key/PackageInstaller/` 与 `evidence/decompiled/key/MIUIGuardProvider/`。
@@ -981,7 +986,7 @@ adb shell su -c 'sqlite3 /data/user/0/com.mobiletools.systemhelper/databases/sys
   "select ID, length(jsonString) from dmregister"'
 adb shell ss -tnp | grep -E "18080|:443"
 adb shell dumpsys package com.miui.packageinstaller | grep -E "versionName|versionCode"
-adb logcat -d | grep -E "MIUIPI_NetUtil|MIUIPI_InstallDataReporter|virus scan timeout"
+adb logcat -d | grep -E "MIUIPI_NetUtil|MIUIPI_InstallDataReporter|VirusScanManagerService|CloudScanner"
 ```
 
 ---
@@ -1022,4 +1027,4 @@ sha256sum -c evidence/SHA256SUMS
 - 取证过程未修改业务逻辑；测试用配置已恢复原值。
 - 本文已移除设备标识、SIM 标识、位置、WiFi、App 清单等个人隐私信息，仅保留技术事实。
 - 文中所述组件均为系统预装、Xiaomi 平台签名，不代表其具有恶意意图；报告关注的是采集范围、加密方式与用户可控性。
-- 包管理器部分基于单台设备、单次安装/取消测试；未使用真实诈骗样本，`/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）与 `/virus/localResult/report` 未在本次跑通；per-app 云控请求未捕获，`cToken/tInfo` 未触发；`adb install` / `pm install` 路径未覆盖。
+- 包管理器部分基于单台设备、单次安装/取消测试；未使用真实诈骗样本，`/virus/localResult/report` 未能触发；`cToken/tInfo` 未触发；`adb install` / `pm install` 路径未覆盖。

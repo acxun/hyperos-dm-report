@@ -46,20 +46,35 @@ D/MIUIPI_NetUtil: request result  : {"data":"succ","code":200,"msg":"succ"}
 ## 4. 病毒扫描与 pcap
 
 ```text
-I/MIUIPI_NewInstallerPrepareActivity: virus scan timeout
+I/MIUIPI_NewVirusScanner: using new VirusScanManager SDK
+I/MIUIPI_NewVirusScanner: doVirusCheckNew: finished, code=0, hasResult=false
+I/MIUIPI_NewVirusScanner: virus check cost 2676, isVirusScanTimeOut: false
+I/VirusScanManagerService: Submit: ScanTask[scene=1,useCloudScan=true,pid=<pid>,input=1]
+I/CloudScanner: Scanning...
 ```
 
 抓包摘要：
 
-- `tcpdump -i any` 抓到 `api.installer.xiaomi.com:443`（`/v3/cloud_config/query`、`/info/layout/v2`、`/avl/upload`）；
-- 未抓到 `virus-engine.sec.miui.com` 的 DNS 查询或 TLS SNI；
-- 与“安装器病毒扫描超时、未完成 GuardProvider 云查”一致。
+- `tcpdump -i any` 抓到 `api.installer.xiaomi.com:443`（`/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode`、`/info/layout/v2`、`/avl/upload`）；
+- 抓到 `virus-engine.sec.miui.com` 的 DNS 查询与 TLS SNI。
 
-## 5. per-app 云控回退
+## 5. per-app 云控
+
+```text
+D/MIUIPI_HttpLoggingInterceptor: --> POST https://api.installer.xiaomi.com/v4/game/interceptcheck/safemode
+D/MIUIPI_HttpLoggingInterceptor: Content-Length: 1928
+D/MIUIPI_HttpLoggingInterceptor: <-- 200 https://api.installer.xiaomi.com/v4/game/interceptcheck/safemode
+
+packageName=com.example.pkgtest&appName=FuseFixer&versionCode=38&versionName=3574975
+&apkMd5=<APK MD5>&apkSignature=<签名摘要>&apkSignature2=<签名摘要>
+&apkSignature3=<签名摘要>&apkSignatureSha1=<SHA1>&apkSignatureSha256=<SHA256>
+&cdMd5=<渠道摘要>&source=com.android.fileexplorer&antifraudLabel=
+&newInstall=1&installationMode=1&apkSize=74594
+```
 
 ```text
 I/MIUIPI_InstallTask: params loaded for FuseFixer com.example.pkgtest:
-I/MIUIPI_InstallTask: cp: catA=[null], sys=[true], aMS=[null], aMC=[0], regS=[2], regRS=[null], useRP=[null]
+I/MIUIPI_InstallTask: cp: catA=[unknown], sys=[false], aMS=[3], aMC=[3], regS=[1], regRS=[0], useRP=[true]
 ```
 
 本次未触发 `cToken`/`tInfo`；相关能力为代码级证据。
@@ -90,7 +105,7 @@ content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app
 # 打开安装器并抓 logcat
 adb logcat -c
 adb shell am start -a android.intent.action.VIEW \
-  -d file:///sdcard/Download/pkgtest.apk \
+  -d file:///sdcard/Download/pkgtest2.apk \
   -t application/vnd.android.package-archive
 
 # 抓包

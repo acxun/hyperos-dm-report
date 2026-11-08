@@ -77,9 +77,9 @@
 
 ### 10.3 包管理器上报未做真实诈骗样本验证
 
-- 现状：已实测安装/取消都会触发 `/avl/upload`；打开安装界面会触发 `/v3/cloud_config/query` 与 `/info/layout/v2`。
-- 未覆盖：per-app 云控请求未捕获；安装器病毒扫描 `virus scan timeout`，未观察到 `/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）；`cToken/tInfo` 未触发；`/virus/localResult/report` 无命中样本；`adb install` / `pm install` 路径未测。
-- 补法：在隔离环境用已知被标记样本（或云端可控测试包）验证 GuardProvider 云查/报告；MITM 或 Frida 观察 per-app 云控响应；单独验证 `pm install` 是否绕过安装器 UI 上报。
+- 现状：已实测安装/取消都会触发 `/avl/upload`；打开安装界面会触发 `/v3/cloud_config/query`、`/v4/game/interceptcheck/safemode` 与 `/info/layout/v2`；GuardProvider `/risk/scan` 与 `virus-engine` DNS/SNI 已实测。
+- 未覆盖：`/virus/localResult/report` 无命中样本；`cToken/tInfo` 未触发；`adb install` / `pm install` 路径未测；最终基线测试停在指纹确认，未完成安装。
+- 补法：在隔离环境用已知被标记样本（或云端可控测试包）验证威胁报告；MITM 或 Frida 观察 `cInfo.cFlag/tFlag` 响应；单独验证 `pm install` 是否绕过安装器 UI 上报。
 
 ---
 
