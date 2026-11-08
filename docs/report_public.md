@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装运营商 DM 组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.3.4
+- 版本：v1.3.5
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -10,7 +10,7 @@
 
 ## 0. 摘要
 
-在一台 HyperOS 3.0（Android 16）设备上，确认存在两套运营商终端管理（DM）客户端、一套系统遥测组件和一套本地反诈数据库：
+在一台 HyperOS 3.0（Android 16）设备上，确认存在两套运营商终端管理（DM）客户端、一套电信自动注册组件、一套系统遥测组件、一套本地反诈数据库和一套 AI 通话防诈组件：
 
 | 组件 | 包名 | 归属 | 服务器 | 状态 |
 |---|---|---|---|---|
@@ -23,7 +23,7 @@
 
 主要结论：
 
-1. `SystemHelper` **每 30 分钟采集**位置、基站、WiFi 并写入本地队列；**实际上报频率不是 30 分钟**：信号历史默认 **12 小时**一次、App 清单 **24 小时**一次，设备信息由开机/换卡/联网事件触发。上报内容包含设备标识、SIM 标识（部分打码）、经纬度（6 位小数）、行政区、基站参数、WiFi 信息、存储信息与 App 使用清单。
+1. `SystemHelper` **每 30 分钟采集**位置、基站、WiFi 并写入本地队列；**实际上报频率不是 30 分钟**：信号历史默认 **12 小时**一次、App 清单 **24 小时**一次，设备信息由开机/换卡/联网事件触发。上报内容包含设备标识、SIM 标识（部分打码）、经纬度（最多 6 位小数）、行政区、基站参数、WiFi 信息、存储信息与 App 使用清单。
 2. 上报链路为 **明文 HTTP + AES-128-ECB**，且 **AES key = MD5(明文)**；`sign` 参数是 **RSA(1024 位公钥, MD5)**。由于 key 由明文派生，取得本地明文即可还原网络密文（已实测）。
 3. `DMRegService` 采集 App 清单、完整 SIM 标识、基站/WiFi、按小时流量（含路由器 MAC 与公网 IP）、蓝牙/WiFi 列表，上报开关由云端配置控制。
 4. 两套 DM 均存在 **无权限保护的导出组件**，本机任意应用可重定向上报地址或触发上报。
@@ -76,7 +76,7 @@
 
 ### 3.2 采集内容
 
-**信号/位置（30 分钟一条，本地保留 3 天）**
+**信号/位置（30 分钟一条，本地最多 100 条，约 50 小时）**
 
 ```
 Time / IMEI / ICCID / IMSI（部分打码）/ MNC / NetworkType
@@ -122,7 +122,7 @@ sign  = Base64(RSA/ECB/PKCS1(pub.cer, key))
 ### 3.4 队列与重试
 
 - 本地库：`/data/user/0/com.mobiletools.systemhelper/databases/systemhelper`（表 `dmregister`）
-- 队列封顶约 10 条；HTTP 200/416 视为成功，其他状态（含 429）把明文写入队列
+- 队列封顶 11 条（按 `count-10` 删除旧记录后再插入）；HTTP 200/416 视为成功，其他状态（含 429）把明文写入队列
 - 成功后会启动历史重试线程，弹出最新一条重发；该线程先删除后发送，失败即丢
 - 实测队列规模约 10–11 条、约 187 KB，其中单条最大约 66–69 KB
 
@@ -131,8 +131,10 @@ sign  = Base64(RSA/ECB/PKCS1(pub.cer, key))
 ```java
 if (Settings.Secure.getInt("operator_service_improve_plan", 0) != 1) return false;
 if (!networkConnected()) return false;
-return (isWifi && mnc.startsWith("460")) || (!isWifi && isUnicom);
+return (isWifi && isChinaMnc) || (!isRoaming && isUnicom);
 ```
+
+> `isRoaming` 来自 `f1/a.java` 的 `ServiceState.getRoaming()`；`isChinaMnc` 检查 MNC 是否以 460 开头；`isUnicom` 只认 46001/46006/46009/46010。
 
 ### 3.5.1 采集频率 ≠ 上报频率
 
@@ -147,7 +149,7 @@ return (isWifi && mnc.startsWith("460")) || (!isWifi && isUnicom);
 | DMReg App 采集 | 7 天 | `app_heartbeat_interval = 604800000` |
 
 > **30 分钟只是“采集到本地”，不是“每 30 分钟上报”。**
-> 这也解释了为什么抓到的 R 包一次包含 56/100 条记录，而不是 1 条。
+> 这也解释了为什么抓到的 R 包一次包含 100 条记录，而不是 1 条。
 
 ### 3.6 抓包/解密结果（脱敏）
 
@@ -251,7 +253,7 @@ b();             // 读日志开关
 - 备用：`https://b.fxltsbl.com`
 - CoAP/LwM2M：`coap://m.fxltsbl.com:5683` → `117.134.71.81`（本机未观察到流量）
 - 实名拍照：`https://auc.fxltsbl.com/AuthCenter/datareport?func=tsdk:photoReg`
-- AES key 硬编码于 `Constant.java`
+- AES key 一部分硬编码于 `Constant.java`（`AES_KEY`），另一部分由 native `libaes-jni` 的 `keyFromJNI()` 提供
 
 ### 4.5 运行特征
 
@@ -291,16 +293,16 @@ b();             // 读日志开关
 | 表 | 说明 |
 |---|---|
 | `screenshot` | 仅毫秒时间戳（字段名拼写错误 `screenshort_time`） |
-| `install_app` | 包名、来源、版本、安装完成时间 |
+| `install_app` | 包名、应用名、来源、版本、MD5、安装完成时间 |
 | `fraud_phone` | 号码 MD5、归属地、运营商、时长 |
 | `call_forwarding` | 呼叫转移状态 |
 | `voip_record` / `screen_share` | 通话/投屏记录 |
 | `airplane_mode` / `fraud_url` | 飞行模式/URL 记录 |
 
 - 写入进程：`com.miui.securitycenter.remote`（uid 1000）
-- 对外接口：`FraudDetectionProvider` / `MiFraudDetectionService`，权限为 signature 级（`ACCESS_XSOF_FRAUD_DETECTION`）
+- 对外接口：`FraudDetectionProvider`（`exported=true`，signature 权限 `ACCESS_XSOF_FRAUD_DETECTION`）；`MiFraudDetectionService` 为 `exported=false`，仅应用内/系统绑定
 - 实测：按一次截屏，`screenshot` 表 +1 行，毫秒时间戳
-- **未发现上传路径**：数据为 `Parcelable`，无网络 DTO；`fraud-detection.engine.miui.com` 在 SecurityCenter 中仅用于 NFC 反诈配置 GET
+- **未发现上传路径**：数据写入本地 SQLite，通过 ContentProvider / Binder 在本地暴露；未发现网络 DTO。`fraud-detection.engine.miui.com` 在 SecurityCenter 中仅用于 NFC 反诈配置 GET
 
 ---
 
@@ -316,6 +318,7 @@ b();             // 读日志开关
 | 触发场景 | 语音/视频通话界面在前台（特定 Activity） |
 | 采集范围 | **整屏镜像**（`AUTO_MIRROR` + 全屏尺寸） |
 | 产物 | 每段 3 秒的 `clip.mp4` → Base64 → 上传 `detection-aigc.engine.miui.com` |
+| 分析版本 | 预装 `2.5.6-20251106.0`；当前设备已更新到 `3.1.4-20260902.0`，3 秒循环与上传链路在 3.1.4 中仍存在 |
 | 当前状态 | 开关 0、`RECORD_AUDIO` 未授权、无活跃 projection、无 clip 文件 |
 
 ### 7.1 录屏与上传链路
@@ -363,7 +366,8 @@ recorder.b()                     // MediaRecorder.release()
 - 若录制返回空（例如 `stop()` 失败），直接重试，不进入 2 秒等待。
 - 单次服务生命周期由云端配置 `detectionServiceLifetimeThresholdInMinutes` 限制，默认 10 分钟；通话结束或服务停止时协程取消。
 - 该循环只在 `COMMAND=2`（视频检测）路径；`COMMAND=1`（语音）走 ASR 文本检测，不使用这段录屏循环。
-- 本节基于 `2.5.6-20251106.0`；`3.1.4` 更新包未逐版本比对。
+- `2.5.6-20251106.0` 与当前 `3.1.4-20260902.0` 均确认存在该循环；3.1.4 的对应方法为 `defpackage.x7.o`，JADX 同样报 `JadxOverflowException`，用 `--show-bad-code` 可还原。
+- 3.1.4 中对应类：`defpackage.re3`（录制）、`defpackage.x7`（循环）、`defpackage.k43`（检测接口）、`defpackage.u23`（投屏）。
 
 > 取证说明：JADX 默认模式在 `AiGuardService$p.A` 抛 `JadxOverflowException`，方法体被标记为 “not decompiled”。改用 `jadx --show-bad-code --comments-level debug` 重反编译后取得上述 smali 伪代码；`U3.c.o(n, SECONDS)` 与 `V3.W.b(...)`（Kotlin `delay`）已交叉确认。此前“录制类无可见调用点”的表述据此撤回。
 
@@ -384,7 +388,7 @@ SecurityCenter AiGuardSceneService
 ```
 
 - 微信/QQ 路径：`com.tencent.mm`、`com.tencent.mobileqq`，匹配对应 Activity
-- **普通电话路径**：`TelephonyManager` 通话状态；`CALL_STATE=2` 且号码不在黄页名单时，启动 `PHONE_SCAM_SCENE=2`
+- **普通电话路径**：`TelephonyManager` 通话状态；`CALL_STATE=2` 且号码**不在联系人、也不在黄页**时，启动 `PHONE_SCAM_SCENE=2`
 - 场景值：QQ `{3,1}`，微信 `{4,2}`
 - `CAPABILITIES & 1` → 语音检测；`CAPABILITIES & 2` 且 `isUsingCamera` → 视频检测
 - `AiGuardService.onStartCommand`：
@@ -424,9 +428,11 @@ SecurityCenter AiGuardSceneService
 | `RECORD_AUDIO`（仅语音路径） | granted=false |
 | 活跃 MediaProjection | null |
 | `cache/clip_*` | 无 |
-| `ai_guard_daily_report.xml` | 空 |
+| `ai_guard_daily_report.xml` | `<map />`（空） |
 | `screen_share` / `voip_record` | 0 行 |
 
+> 当前设备为 `3.1.4-20260902.0`；上表已在 3.1.4 上复核；`available` 来自 SecurityCenter 的 `ai_guard_function_cloud_data.xml`。
+>
 > 视频路径不检查 `RECORD_AUDIO`；当前未启用的决定性条件是 `ai_guard_function_switch=0`、`available=false`、无活跃 `MediaProjection`、无 `clip` 文件。
 >
 > 结论：**能力存在，且视频路径已确认接线（3 秒一段、未命中隔 2 秒再录）；触发面窄、依赖多、当前未启用；一旦启用，录制范围是整屏，而不是只覆盖某个 App。**
@@ -587,7 +593,7 @@ SharedPreferences：
 | 4 | **权限很大**：共享电话 UID，继承短信/通话记录/相机/联系人 |
 | 5 | **入口开放**：`AutoRegReceiver` / `RegistrationService` 无权限保护 |
 | 6 | **明文 HTTP**：路径 B 在满足条件的机型上明文发送 MAC/IP/BSSID/CTEI |
-| 7 | **Base64 冒充加密**：Header 写 `encrypted-json`，实际只是 Base64 |
+| 7 | **Header 与载荷不符**：Header 写 `encrypted-json`，实际只是 Base64 编码 |
 
 **用户侧**：不用电信卡时，可考虑 `adb shell pm disable-user --user 0 com.xiaomi.registration`，但可能影响电信 VoLTE/5G/IMS；或封堵 `zzhc.vnet.cn` / `typdm.tydevice.com`。
 
@@ -623,8 +629,9 @@ AndroidManifest.xml
 2. **弱加密设计**：AES-128-ECB、无 IV、`key = MD5(明文)`，确定性加密；相同明文产生相同密文。
 3. **1024 位 RSA + 100 年有效期**：自签名证书，2019–2119；结构正常（popcount 49.7%，无小因子、无共享素数、无近似素数），但 1024 位已低于现代标准。
 4. **无权限保护的导出组件**：任意本机应用可修改 `SystemHelper` 的上报服务器、触发上报、清空配置；可启动移动 DM 服务、触发心跳。
-5. **可观测性缺失**：两套 DM 均无用户可见开关/日志；`operator_service_improve_plan` 是唯一总闸。
+5. **可观测性缺失**：两套 DM 均无用户可见开关/日志；对联通 DM 而言，`operator_service_improve_plan` 是唯一总闸；移动 DM 由云端开关单独控制。
 6. **加密可逆性**：由于 key 由明文派生，任何能获取本地明文（root、备份、队列）的一方都可解密网络流量。
+7. **电信自动注册组件**：路径 B 使用明文 HTTP（MAC/IP/BSSID/CTEI）；`AutoRegReceiver` / `RegistrationService` 导出且无权限保护；`zzhc` 载荷仅为 Base64。
 
 ---
 
@@ -715,7 +722,7 @@ adb shell ss -tnp | grep -E "18080|:443"
 
 ---
 
-## 12.1 证据包（v1.2）
+## 12.1 证据包
 
 完整证据随报告仓库提供：
 
@@ -747,7 +754,7 @@ sha256sum -c evidence/SHA256SUMS
 ## 13. 限制与声明
 
 - 本报告基于单台设备、单次取证，不代表所有小米机型/系统版本。
-- 反编译代码可能因混淆存在偏差，关键结论均已通过运行时数据与抓包交叉验证。
+- 反编译代码可能因混淆存在偏差；关键结论尽量通过运行时数据与抓包交叉验证，无法实测的已在正文标注。
 - 取证过程未修改业务逻辑；测试用配置已恢复原值。
 - 本文已移除设备标识、SIM 标识、位置、WiFi、App 清单等个人隐私信息，仅保留技术事实。
 - 文中所述组件均为系统预装、Xiaomi 平台签名，不代表其具有恶意意图；报告关注的是采集范围、加密方式与用户可控性。
