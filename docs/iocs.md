@@ -15,6 +15,8 @@
 | `detection-aigc.engine.miui.com` | — | 443 / HTTPS | `com.miui.guardprovider` | AI 通话检测（`clip.mp4`） |
 | `fraud-detection.engine.miui.com` | — | 443 / HTTPS | `com.miui.securitycenter` / GuardProvider | NFC 反诈配置、伪造 App 举报 |
 | `flash.sec.miui.com` | — | 443 / HTTPS | GuardProvider / SecurityCenter | `/detect/app`、游戏联盟等 |
+| `api.installer.xiaomi.com` | — | 443 / HTTPS | `com.miui.packageinstaller` | 安装器云控、布局、`/avl/upload` |
+| `virus-engine.sec.miui.com` | — | 443 / HTTPS | GuardProvider | `/risk/scan`（3.1.4）、`/virus/scan`（2.5.6）、`/virus/localResult/report` |
 
 WAF 响应特征：`WZWS-RAY`（联通 DM 接入层）。
 
@@ -27,6 +29,8 @@ WAF 响应特征：`WZWS-RAY`（联通 DM 接入层）。
 | `com.miui.misightservice` | `/system_ext/app/MiSightService` | 0.9.5 | — |
 | `com.miui.securitycenter` | `/system/priv-app/...` | — | 1000 |
 | `com.miui.guardprovider` | `/product/app/MIUIGuardProvider/MIUIGuardProvider.apk` | 2.5.6 / 3.1.4 | 10152 |
+| `com.miui.packageinstaller` | `/data/app/.../com.miui.packageinstaller-.../base.apk`（系统应用更新） | 5.5.7.0.0-20261012 (55700) | 10126 |
+| `com.xiaomi.registration` | `/product/priv-app/AutoRegistration/AutoRegistration.apk` | 15.1.22 (63) | 1001 |
 
 ## 关键组件
 
@@ -45,6 +49,10 @@ com.miui.dmregservice/cn.richinfo.dm.receiver.DMBroadCastReceiver   # permission
 com.miui.dmregservice/cn.richinfo.dm.service.DMService              # exported, no permission
 com.miui.dmregservice/com.richinfo.mthttp.MTStaticBReceiver         # exported, no permission
 com.miui.dmregservice/.BootCompleteReceiver                         # exported, no permission
+
+com.miui.packageInstaller.NewInstallerPrepareActivity              # 安装准备/云控
+com.miui.packageInstaller.InstallProgressParentActivity             # 安装/取消上报
+com.miui.guardprovider.server.VirusScanService                      # 安装前病毒扫描
 ```
 
 ## 文件哈希（SHA-256）
@@ -53,7 +61,9 @@ com.miui.dmregservice/.BootCompleteReceiver                         # exported, 
 1de8d965e295db27e189aa179cdb45438d7f759cffbb43ce55f840b614ff6c65  SystemHelper.apk
 6e3ff72e078a4dca54600f69bbc43ce165503ff23c62d2ef0abdcdca5acbadcc  RegService.apk
 7b5a26b38cf3f3c1967cd8e6ed06d3d1ac0ff45371037c16e7982e9925f510c3  MIUIGuardProvider.apk
+fdc5c01c8170d2c1ed8dd21087c5647b32ba75422a9a43999e232383a819b5f9  PackageInstaller.apk
 f4eda1b7b0f46521c93ddc75f7d833aec7bd48674c561e545f2b84a1edd6284c  securitycenter base.apk
+91f6324b07fe67cb753ac2875dd0c59f2b8cb9a43b97d92fb42b11b85f27c303  AutoRegistration.apk
 810c0122ba6af7a4b6a5921fdbbbf9197fb2e0b2e82de0c5aa40d28f1b7c6501  pub.cer
 ```
 
@@ -87,5 +97,6 @@ sign = Base64(RSA/ECB/PKCS1(pub.cer, key)) in query string
 
 - 网络侧：对 `dm.wo.com.cn:18080`、`a.fxltsbl.com`、`m.fxltsbl.com:5683`、`event-log.cnbj1.mi-fds.com` 做域名/SNI 监控。
 - 主机侧：检查上述包名、`/system/priv-app/SystemHelper`、`/product/priv-app/RegService`。
+- 安装器侧：监控 `api.installer.xiaomi.com` 的 `/avl/upload`、`/info/layout/v2`、`/v3/cloud_config/query`，以及 `virus-engine.sec.miui.com` 的 `/risk/scan`（3.1.4）与 `/virus/localResult/report`。
 - 数据侧：检查 `.../databases/systemhelper`（表 `dmregister`）、`.../databases/cmcc_dm.db`、`/data/misc/user/0/securitycenter/fraud_detection_data.db`。
 - 证书侧：匹配 `pub.cer` 的 SHA-256 / 序列号 `528B9360`。

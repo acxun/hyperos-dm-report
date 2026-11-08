@@ -1,9 +1,9 @@
-# HyperOS 预装运营商组件调查报告
+# HyperOS 预装组件调查报告
 
 > 对一台 Xiaomi HyperOS 3.0（Android 16）设备的静态与动态分析。
-> 记录两套运营商 DM、电信终端自动注册、系统遥测、本地反诈库与 AI 通话防诈的行为、协议与安全问题。
+> 记录两套运营商 DM、电信终端自动注册、系统遥测、本地反诈库、AI 通话防诈与系统包管理器安装上报的行为、协议与安全问题。
 
-- 报告版本：v1.3.6
+- 报告版本：v1.3.7
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
 - 公开报告：[`docs/report_public.md`](docs/report_public.md)
 - 执行摘要：[`docs/executive_summary.md`](docs/executive_summary.md)
@@ -24,6 +24,7 @@
 | 系统遥测 | `com.miui.misightservice` + `/system_ext/bin/misight`(root) | `event-log.cnbj1.mi-fds.com` | 活跃 |
 | 本地反诈库 | `com.miui.securitycenter` | 未发现上传 | 本地写入 |
 | AI 通话防诈 | `com.miui.guardprovider` | `detection-aigc.engine.miui.com` 等 | 开关关闭 |
+| 系统包管理器 | `com.miui.packageinstaller` | `api.installer.xiaomi.com` / `virus-engine.sec.miui.com` | 安装/取消均上报 |
 
 关键结论：
 
@@ -34,6 +35,7 @@
 5. AI 通话防诈的视频路径为 **录 3 秒 → 上传 → 未命中隔 2 秒再录**；预装 2.5.6 与当前 3.1.4 均确认存在该循环，当前开关为 0。
 6. 两套 DM 与电信自动注册组件均存在无权限保护的导出组件，本机任意应用可触发上报或重置状态。
 7. 截屏时间、安装记录、通话记录仅写入本地反诈库，未发现上传路径。
+8. `com.miui.packageinstaller` 打开安装界面即向 `api.installer.xiaomi.com` 发包名/设备信息；安装与取消都会向 `/avl/upload` 上传安装元数据；云端可按 `cInfo` 要求上传 APK 加密片段与 TLSH。GuardProvider 云查命中后约 2 小时上报详细威胁报告。
 
 ---
 
@@ -59,16 +61,16 @@
 ├── evidence/
 │   ├── MANIFEST.md            # 证据清单 + SHA-256
 │   ├── SHA256SUMS             # sha256sum -c 可校验
-│   ├── apk/                   # 5 个 APK（不入库）
+│   ├── apk/                   # 6 个 APK（不入库）
 │   ├── decompiled/
-│   │   ├── key/               # 48 个关键类反编译源码（入库）
+│   │   ├── key/               # 66 个关键类反编译源码（入库）
 │   │   └── full/              # 完整源码树（不入库）
 │   ├── certificates/          # pub.cer / pub.pem / openssl 文本
 │   ├── databases/             # 仅 schema 与行数
-│   └── redacted/              # 脱敏样本
+│   └── redacted/              # 脱敏样本与日志
 └── private/                   # 不入库（.gitignore）
     ├── report_internal.md     # 内部版（含隐私数据）
-    ├── pcap/                  # B / R / A 三次原始抓包
+    ├── pcap/                  # B/R/A 与安装器测试原始抓包
     ├── A_decrypted_ID59.json / .csv
     └── R_decrypted_ID47.json / .csv
 ```

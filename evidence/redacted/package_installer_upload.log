@@ -1,0 +1,102 @@
+# 包管理器安装上报：脱敏日志摘录
+
+- 日期：2026-11-08
+- 设备：Xiaomi HyperOS 3.0.306.0.WOOCNXM / Android 16（型号、OAID、会话 ID 已移除）
+- 安装器：`com.miui.packageinstaller` 5.5.7.0.0-20261012（versionCode 55700）
+- GuardProvider：`com.miui.guardprovider` 3.1.4-20260902.0
+- 测试 APK：`com.example.pkgtest`（开源 FuseFixer 重打包；debug v2 签名；无恶意代码）
+- 说明：为读取请求体，测试时临时创建 `/data/system/package_installer_log_on`；测试后已删除。
+
+## 1. 打开安装界面（尚未确认）
+
+```text
+D/MIUIPI_HttpLoggingInterceptor: --> POST https://api.installer.xiaomi.com/v3/cloud_config/query
+D/MIUIPI_HttpLoggingInterceptor: <-- 200 https://api.installer.xiaomi.com/v3/cloud_config/query
+D/MIUIPI_HttpLoggingInterceptor: --> POST https://api.installer.xiaomi.com/info/layout/v2
+D/MIUIPI_HttpLoggingInterceptor: <-- 200 https://api.installer.xiaomi.com/info/layout/v2
+
+D/MIUIPI_NetInterceptor: appName=FuseFixer&hybridFrameworkVersion=-2&channel=08-1
+  &installSource=com.android.fileexplorer&androidSdkVersion=36
+  &packageName=com.example.pkgtest&newInstall=1
+  &instanceId=<redacted>&mo=<redacted>&c=ct&d=<redacted>&e=55700
+  &osvn=OS3.0&l=zh_CN&n=WIFI&r=CN&oa=<redacted>&t=stable&av=16
+  &v=OS3.0.306.0.WOOCNXM&ca=arm64-v8a
+```
+
+## 2. 安装成功：`/avl/upload`
+
+```text
+D/MIUIPI_NetUtil: request start : https://api.installer.xiaomi.com/avl/upload
+D/MIUIPI_NetUtil: jsonBodyStr : {"installCnt":"1","permission":"android.permission.QUERY_ALL_PACKAGES","installTime":"<ts>","apkHash":"<APK MD5>","appSourcepackageName":"com.android.fileexplorer","versionName":"3574975","versionCode":"38","name":"FuseFixer","fingerprint":"<签名摘要>","packageName":"com.example.pkgtest","apkSize":"74594","touchInstallCnt":"1","cdMd5":"<渠道摘要>","appSourceValue":"文件管理"}
+D/MIUIPI_NetUtil:  post body : {"installCnt":"1", ... }
+D/MIUIPI_NetUtil:  responseCode :  200
+D/MIUIPI_NetUtil: request result  : {"data":"succ","code":200,"msg":"succ"}
+D/MIUIPI_InstallDataReporter: report result: {"data":"succ","code":200,"msg":"succ"}
+```
+
+## 3. 取消安装：`/avl/upload`
+
+```text
+D/MIUIPI_NetUtil: request start : https://api.installer.xiaomi.com/avl/upload
+D/MIUIPI_NetUtil: jsonBodyStr : {"installCnt":"0","permission":"android.permission.QUERY_ALL_PACKAGES","installTime":"<ts>","apkHash":"<APK MD5>","appSourcepackageName":"com.android.fileexplorer","versionName":"3574975","versionCode":"38","name":"FuseFixer","fingerprint":"<签名摘要>","packageName":"com.example.pkgtest","apkSize":"74594","touchInstallCnt":"1","cdMd5":"<渠道摘要>","appSourceValue":"文件管理"}
+D/MIUIPI_NetUtil:  responseCode :  200
+D/MIUIPI_NetUtil: request result  : {"data":"succ","code":200,"msg":"succ"}
+```
+
+## 4. 病毒扫描与 pcap
+
+```text
+I/MIUIPI_NewInstallerPrepareActivity: virus scan timeout
+```
+
+抓包摘要：
+
+- `tcpdump -i any` 抓到 `api.installer.xiaomi.com:443`（`/v3/cloud_config/query`、`/info/layout/v2`、`/avl/upload`）；
+- 未抓到 `virus-engine.sec.miui.com` 的 DNS 查询或 TLS SNI；
+- 与“安装器病毒扫描超时、未完成 GuardProvider 云查”一致。
+
+## 5. per-app 云控回退
+
+```text
+I/MIUIPI_InstallTask: params loaded for FuseFixer com.example.pkgtest:
+I/MIUIPI_InstallTask: cp: catA=[null], sys=[true], aMS=[null], aMC=[0], regS=[2], regRS=[null], useRP=[null]
+```
+
+本次未触发 `cToken`/`tInfo`；相关能力为代码级证据。
+
+## 6. 代码级路径（未在本次运行时触发）
+
+```text
+https://api.installer.xiaomi.com/avl/upload
+  -> CloudParams.cInfo: cFlag/cOffset/cSize/tFlag
+  -> cToken (AES/CBC/PKCS5Padding, key=MD5(XiaoMiSafe.getKeyBytes()), IV=getKeyViBytes())
+  -> tInfo (TLSH)
+
+https://virus-engine.sec.miui.com/risk/scan        # 3.1.4；2.5.6 为 /virus/scan
+  -> CloudScanApkInfo: packageName/versionCode/apkCertificateMD5/apkCertificateSHA256/mfFileSHA256
+
+https://virus-engine.sec.miui.com/virus/localResult/report
+  -> ResultReportData: threatLevel/threatName/malwareCodeFeature/packageName/appName/versionCode/
+     apkCertificateMD5/apkCertificateSHA256/mfFileSHA256/apkMd5/apkSha256/miuiVersion/
+     androidVersion/device/uuid/hitFiles
+
+content://com.xiaomi.security.xsof.FraudDetectionProvider/install_app
+  -> pkg_name/app_name/install_finish_time/app_tag_id/version_code
+```
+
+## 7. 复现命令（概要）
+
+```bash
+# 打开安装器并抓 logcat
+adb logcat -c
+adb shell am start -a android.intent.action.VIEW \
+  -d file:///sdcard/Download/pkgtest.apk \
+  -t application/vnd.android.package-archive
+
+# 抓包
+adb shell su -c "tcpdump -i any -s0 -w /data/local/tmp/install.pcap 'tcp port 443 or udp port 53'"
+adb shell su -c "pkill -INT tcpdump"
+adb pull /data/local/tmp/install.pcap
+```
+
+> 测试 APK 已卸载，调试开关已删除；原始日志与 pcap 仅本地保留。

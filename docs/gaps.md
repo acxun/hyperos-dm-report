@@ -50,7 +50,7 @@
 
 ### 8. APK 与证书的哈希清单不完整
 
-- 现状：已计算 5 个 APK 与 `pub.cer` 的 SHA-256（见 `iocs.md`）。
+- 现状：已计算 6 个 APK 与 `pub.cer` 的 SHA-256（见 `iocs.md`）。
 - 补法：补充各 split APK、oat/vdex、证书链、签名方案（v2/v3）详情。
 
 ### 9. 未验证导出组件的实际可利用性
@@ -74,6 +74,12 @@
 
 - 结论：两套 DM 均无 push/网络监听；触发源只有闹钟、系统广播、本地导出组件、运营商 SMS/STK（间接）。
 - 按作者要求，该节未写入公开报告。
+
+### 10.3 包管理器上报未做真实诈骗样本验证
+
+- 现状：已实测安装/取消都会触发 `/avl/upload`；打开安装界面会触发 `/v3/cloud_config/query` 与 `/info/layout/v2`。
+- 未覆盖：per-app 云控请求未捕获；安装器病毒扫描 `virus scan timeout`，未观察到 `/risk/scan`（3.1.4；2.5.6 为 `/virus/scan`）；`cToken/tInfo` 未触发；`/virus/localResult/report` 无命中样本；`adb install` / `pm install` 路径未测。
+- 补法：在隔离环境用已知被标记样本（或云端可控测试包）验证 GuardProvider 云查/报告；MITM 或 Frida 观察 per-app 云控响应；单独验证 `pm install` 是否绕过安装器 UI 上报。
 
 ---
 
