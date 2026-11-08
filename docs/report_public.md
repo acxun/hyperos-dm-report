@@ -1,6 +1,6 @@
 # 小米 HyperOS 预装组件数据采集与上报调查报告（公开版）
 
-- 版本：v1.4.7
+- 版本：v1.4.8
 - 日期：2026-11-08
 - 分析对象：一台 Xiaomi HyperOS 3.0 设备（具体型号、序列号、SIM 信息已隐去）
 - 分析方式：静态反编译 + 运行时数据库取证 + 真机抓包 + 解密验证
@@ -728,6 +728,8 @@ AndroidManifest.xml
 | `exitPageText` | 与实测取消页一致：`已取消安装` / `去应用商店发现更多心动应用与游戏` |
 | `commonConfig.enableDefaultSafeMode` | 1 |
 | `improveEfficiencyAppList` | 7 个限时推荐包（时间窗已过期） |
+
+本次 16 条禁装规则中，15 条是旧版 AOSP/Google 包安装器（`com.android.packageinstaller` 9–16、`com.google.android.packageinstaller` 9/10/11 的特定 build），另 1 条是 `com.xiaomi.xmsf` 7.1.7-C。安装器按 `packageName + versionName` 精确匹配，命中后进入阻止安装分支。
 
 这些是云端下发的安装策略，不是上报；完整包名/哈希/公钥列表只在本地 `private/frida/`。per-app `CloudParams` 的完整响应本次未捕获，`riskType=9999`/`regS=1` 来自安装器日志与代码级证据。
 

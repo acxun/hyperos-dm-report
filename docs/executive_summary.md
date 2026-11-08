@@ -51,7 +51,7 @@
 
 ### 证据
 
-- 公开报告：`docs/report_public.md`（v1.4.7）
+- 公开报告：`docs/report_public.md`（v1.4.8）
 - 证据清单：`evidence/MANIFEST.md`（SHA-256）
 - 抓包：仅本地 `private/pcap/`（不入库）；反编译关键类：`evidence/decompiled/key/`
 - 包管理器脱敏日志：`evidence/redacted/package_installer_upload.log`
